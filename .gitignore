@@ -1,0 +1,12 @@
+.venv/
+
+# Compiled files
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+*.pyc
+*.pyo
+__pycache__/

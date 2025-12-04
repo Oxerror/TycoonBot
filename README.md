@@ -8,6 +8,7 @@ The goal of this project is, that
 - **First** it will recognize the current cards in your hand as well as in play
 - **Second** it will analyze which cards are still in play and who has how many cards
 - **Third** it will recommend me the best possible plays to win the game
+- **Fourth** it will be able to play the game alone (hopefully maybe)
 
 
 ## Requirements
@@ -25,7 +26,7 @@ Requires:
 
 ## Usage
 
-Please don't it doesn't work yet 😅
+Please don't, it doesn't work yet 😅
 
 ## License
 

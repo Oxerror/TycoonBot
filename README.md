@@ -26,7 +26,32 @@ Requires:
 
 ## Usage
 
-Please don't, it doesn't work yet 😅
+**Live capture** — reads your hand from the game screen in a loop:
+```sh
+python VideoStream.py
+```
+Which monitor and which screen regions are used is set in `config.json`
+(`monitor`: mss index, 1 = primary; regions are fractions of the frame).
+
+**Offline test** — runs recognition on the screenshots in `Image/` and
+saves annotated copies:
+```sh
+python ImageRecognition.py test --threshold=0.8
+```
+
+**Tests**:
+```sh
+pytest              # everything
+pytest -m "not slow"  # skip the slow image-matching integration tests
+```
+
+## Status
+
+Step 1 (recognizing the cards in your hand) works: template matching
+finds the rank and suit glyphs (the fanned hand needs a rotation sweep),
+and `GameLogic/HandReader.py` pairs them into `Card` objects. Steps 2-4
+are not started. The `CardCNN` model in `ImageRecognition.py` is an
+untrained skeleton for later.
 
 ## License
 

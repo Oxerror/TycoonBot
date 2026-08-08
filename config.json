@@ -1,0 +1,5 @@
+{
+    "monitor": 2,
+    "hand_region": {"top": 0.75, "bottom": 1.0, "left": 0.0, "right": 1.0},
+    "play_field": {"top": 0.4, "bottom": 0.8, "left": 0.333, "right": 0.667}
+}

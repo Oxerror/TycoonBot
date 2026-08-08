@@ -74,10 +74,13 @@ def detections_to_cards(detections):
         for suit_det in available_suits:
             suit_cx, suit_cy = _center(suit_det)
 
-            # The suit symbol sits below the rank on the same card.
+            # The suit symbol sits below the rank on the same card. The
+            # horizontal window must stay well below the card spacing,
+            # otherwise a neighbor card's (more confident) suit can win
+            # and set off a chain of off-by-one pairings.
             if suit_cy <= rank_cy:
                 continue
-            if abs(suit_cx - rank_cx) > rank_h:
+            if abs(suit_cx - rank_cx) > rank_h * 0.45:
                 continue
 
             dist = (suit_cx - rank_cx) ** 2 + (suit_cy - rank_cy) ** 2

@@ -276,6 +276,59 @@ class CardRecognizer:
 
         return results
 
+    SUIT_NAMES = ('Heart', 'Diamond', 'Spade', 'Cross')
+
+    def refine_suit_detections(self, image, detections, apply_mask=True):
+        """
+        Re-classify suit detections at full resolution.
+
+        The scale-swept search runs downscaled, where suit glyphs are
+        ~13px and Spade/Cross (and their mirrored artwork) blur into
+        each other. Re-matching all four suit templates inside each
+        detection's window at full resolution picks the right one.
+        Mutates and returns the detections.
+        """
+        if apply_mask:
+            image = self.apply_white_mask(image)
+
+        if len(image.shape) == 3:
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        else:
+            gray = image
+
+        for detection in detections:
+            if detection['name'] not in self.SUIT_NAMES:
+                continue
+
+            x, y, w, h = detection['location']
+            angle = detection.get('angle', 0)
+            pad = max(4, w // 4)
+            window = gray[max(0, y - pad):y + h + pad,
+                          max(0, x - pad):x + w + pad]
+
+            best_name, best_score = detection['name'], -1.0
+            for suit in self.SUIT_NAMES:
+                rotated = self._rotate_template(self.templates[suit], angle) \
+                    if angle else self.templates[suit]
+
+                for factor in (0.9, 1.0, 1.1):
+                    new_w, new_h = int(w * factor), int(h * factor)
+                    if new_w < 5 or new_h < 5:
+                        continue
+                    if new_h > window.shape[0] or new_w > window.shape[1]:
+                        continue
+
+                    scaled = cv2.resize(rotated, (new_w, new_h))
+                    score = float(cv2.matchTemplate(
+                        window, scaled, cv2.TM_CCOEFF_NORMED).max())
+                    if score > best_score:
+                        best_name, best_score = suit, score
+
+            detection['name'] = best_name
+            detection['confidence'] = best_score
+
+        return detections
+
     def _non_max_suppression(self, detections, iou_threshold=0.5):
         """Remove overlapping detections."""
         if not detections:
@@ -452,11 +505,13 @@ HAND_MATCH_PARAMS = {
 # Cards are tossed onto the table with up to ~20 degrees of rotation.
 # The game dims previous tricks, so the white mask naturally isolates
 # the current (bright) trick — older plays fall below the mask threshold.
+# No cache_key: unlike the hand, glyph sizes on the table vary from card
+# to card, so pinning one scale per template makes results depend on
+# what happened to be seen first.
 FIELD_MATCH_PARAMS = {
     'threshold': 0.75,
     'angles': range(-20, 21, 5),
     'downscale': 2,
-    'cache_key': 'field',
 }
 
 
@@ -474,6 +529,7 @@ def read_hand(image):
 
     recognizer = get_recognizer()
     detections = recognizer.template_match(image, **HAND_MATCH_PARAMS)
+    recognizer.refine_suit_detections(image, detections)
     return detections_to_cards(detections)
 
 
@@ -494,6 +550,7 @@ def read_play_field(image):
 
     recognizer = get_recognizer()
     detections = recognizer.template_match(image, **FIELD_MATCH_PARAMS)
+    recognizer.refine_suit_detections(image, detections)
     return detections_to_cards(detections)
 
 

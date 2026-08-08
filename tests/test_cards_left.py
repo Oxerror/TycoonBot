@@ -10,13 +10,19 @@ IMAGE_DIR = PROJECT_ROOT / 'Image'
 EXPECTED = {
     'TestImage.png': {'left': 14, 'middle': 11, 'right': 8, 'player': 14},
     'TestImage2.png': {'left': 12, 'middle': 10, 'right': 13, 'player': 13},
+    'TestImage5.png': {'left': 14, 'middle': 12, 'right': 12, 'player': 14},
+    'TestImage6.png': {'left': 12, 'middle': 10, 'right': 10, 'player': 12},
+    # Left and right exercise the 7 and 6 templates from the captures;
+    # 6 was initially misread as 8 until its template existed, which the
+    # bar cross-check exposed (bar total 17 vs a claimed 7+4+8).
+    'TestImage7.png': {'left': 7, 'middle': 4, 'right': 6, 'player': 0},
 }
 
 
 class TestDigitTemplates:
     def test_known_digits_loaded(self):
         reader = CardsLeftReader()
-        assert sorted(reader.templates) == [0, 1, 2, 3, 4, 8]
+        assert sorted(reader.templates) == [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
 
     def test_templates_classify_as_themselves(self):
         reader = CardsLeftReader()

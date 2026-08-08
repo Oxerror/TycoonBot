@@ -66,6 +66,21 @@ class TestPairing:
         detections = [det('King', 100, 10, w=90, h=95)]
         assert detections_to_cards(detections) == []
 
+    def test_neighbor_suit_is_not_stolen(self):
+        """A card whose own suit scored just below the confidence cutoff
+        must not grab the neighbor card's confident suit — that sets off
+        a chain where every card takes its right neighbor's suit."""
+        detections = [
+            det('Jack', 100, 10, w=100, h=110),
+            det('Cross', 122, 120, confidence=0.84),
+            det('Queen', 220, 10, w=100, h=110),
+            det('Cross', 248, 120, confidence=0.92),
+        ]
+        assert as_tuples(detections_to_cards(detections)) == [
+            (Rank.JACK, Suit.CLUBS),
+            (Rank.QUEEN, Suit.CLUBS),
+        ]
+
 
 class TestSpecialCards:
     def test_joker_needs_no_suit(self):

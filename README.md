@@ -76,10 +76,10 @@ the bot tracks itself anyway — serves only as ground truth:
 `GameState.verify_against()` raises an alarm in the capture loop when
 the bookkeeping diverges from the game.
 
-Known gaps: the bubble digit templates only cover 0-4 and 8 (the other
-digits don't appear in the reference screenshots yet), and cards
-clipped at the fan edges are not read. Steps 3-4 are not started. The
-`CardCNN` model in `ImageRecognition.py` is an untrained skeleton.
+Known gaps: cards clipped at the fan edges are not read, and identical
+overlapping cards (a double-joker play) count as one. Steps 3-4 are
+not started. The `CardCNN` model in `ImageRecognition.py` is an
+untrained skeleton.
 
 ## License
 

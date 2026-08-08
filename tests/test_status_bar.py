@@ -11,6 +11,9 @@ IMAGE_DIR = PROJECT_ROOT / 'Image'
 EXPECTED_COUNTS = {
     'TestImage.png': [1, 1, 4, 1, 2, 4, 2, 3, 1, 4, 4, 2, 2, 2, 0],
     'TestImage2.png': [1, 0, 4, 4, 4, 4, 1, 2, 3, 2, 3, 0, 3, 2, 2],
+    'TestImage5.png': [1, 2, 2, 4, 4, 2, 2, 4, 3, 3, 2, 1, 4, 2, 2],
+    'TestImage6.png': [1, 2, 2, 4, 4, 2, 2, 2, 3, 3, 2, 1, 2, 2, 0],
+    'TestImage7.png': [0, 1, 1, 2, 2, 3, 1, 0, 2, 3, 0, 2, 0, 0, 0],
 }
 
 

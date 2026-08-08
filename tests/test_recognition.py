@@ -102,6 +102,36 @@ EXPECTED_HANDS = {
         (Rank.KING, Suit.SPADES),
         (Rank.TWO, Suit.DIAMONDS),
     ],
+    'TestImage5.png': [
+        (Rank.SEVEN, Suit.CLUBS),
+        (Rank.SEVEN, Suit.HEARTS),
+        (Rank.EIGHT, Suit.CLUBS),
+        (Rank.EIGHT, Suit.SPADES),
+        (Rank.TEN, Suit.DIAMONDS),
+        (Rank.JACK, Suit.DIAMONDS),
+        (Rank.QUEEN, Suit.DIAMONDS),
+        (Rank.QUEEN, Suit.SPADES),
+        (Rank.KING, Suit.DIAMONDS),
+        (Rank.KING, Suit.HEARTS),
+        (Rank.KING, Suit.SPADES),
+        (Rank.TWO, Suit.CLUBS),
+        (Rank.TWO, Suit.DIAMONDS),
+    ],
+    'TestImage6.png': [
+        (Rank.EIGHT, Suit.CLUBS),
+        (Rank.EIGHT, Suit.SPADES),
+        (Rank.TEN, Suit.DIAMONDS),
+        (Rank.JACK, Suit.DIAMONDS),
+        (Rank.QUEEN, Suit.DIAMONDS),
+        (Rank.QUEEN, Suit.SPADES),
+        (Rank.KING, Suit.DIAMONDS),
+        (Rank.KING, Suit.HEARTS),
+        (Rank.KING, Suit.SPADES),
+        (Rank.TWO, Suit.CLUBS),
+        (Rank.TWO, Suit.DIAMONDS),
+    ],
+    # Player already went out: the hand area is empty.
+    'TestImage7.png': [],
 }
 
 
@@ -132,6 +162,11 @@ def test_reads_full_hand_from_screenshot(image_name):
 EXPECTED_TRICKS = {
     'TestImage.png': [(Rank.FIVE, Suit.HEARTS), (Rank.JOKER, None)],
     'TestImage2.png': [(Rank.TWO, Suit.HEARTS)],
+    'TestImage5.png': [(Rank.FOUR, Suit.DIAMONDS), (Rank.FOUR, Suit.SPADES)],
+    # A double-joker play: the rear joker's emblem is covered by the
+    # front card, so only one Joker is detectable.
+    'TestImage6.png': [(Rank.JOKER, None)],
+    'TestImage7.png': [(Rank.EIGHT, Suit.HEARTS), (Rank.EIGHT, Suit.SPADES)],
 }
 
 

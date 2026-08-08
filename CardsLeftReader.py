@@ -6,9 +6,8 @@ Left" lettering), so digits are segmented by a white mask plus a
 height filter and classified against digit templates extracted from
 the reference screenshots.
 
-The template set currently covers the digits 0, 1, 2, 3, 4 and 8 — the
-only ones appearing in the reference screenshots. Unknown digits make
-the affected counter read as None instead of guessing.
+The template set covers all ten digits. A blob that matches no
+template makes the affected counter read as None instead of guessing.
 """
 
 import cv2

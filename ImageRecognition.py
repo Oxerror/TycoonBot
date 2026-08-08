@@ -139,7 +139,20 @@ class CardRecognizer:
         tensor = torch.from_numpy(normalized).unsqueeze(0).unsqueeze(0)
         return tensor.to(device)
 
-    def template_match(self, image, threshold=0.7, apply_mask=True):
+    @staticmethod
+    def _rotate_template(template, angle):
+        """Rotate a template around its center, expanding the canvas so nothing is cut off."""
+        h, w = template.shape
+        matrix = cv2.getRotationMatrix2D((w / 2, h / 2), angle, 1.0)
+        cos, sin = abs(matrix[0, 0]), abs(matrix[0, 1])
+        new_w = int(h * sin + w * cos)
+        new_h = int(h * cos + w * sin)
+        matrix[0, 2] += new_w / 2 - w / 2
+        matrix[1, 2] += new_h / 2 - h / 2
+        return cv2.warpAffine(template, matrix, (new_w, new_h), borderValue=0)
+
+    def template_match(self, image, threshold=0.7, apply_mask=True,
+                       scales=None, angles=(0,), downscale=1):
         """
         Perform template matching to find cards in the image.
 
@@ -147,10 +160,22 @@ class CardRecognizer:
             image: Input image (BGR or grayscale)
             threshold: Matching threshold (0-1)
             apply_mask: Whether to apply white mask preprocessing
+            scales: Iterable of template scales to try. The templates were
+                cropped at inconsistent sizes, so the step must be fine
+                enough that every template hits its true on-screen scale.
+            angles: Rotation angles (degrees) to try per template. The hand
+                is displayed as a fan, so cards near the edges are rotated
+                up to ~20 degrees.
+            downscale: Integer factor to shrink the search image by before
+                matching. 2 is ~16x faster and still reliable for the large
+                card glyphs; reported locations are in original coordinates.
 
         Returns:
             List of (name, confidence, location) tuples
         """
+        if scales is None:
+            scales = np.arange(0.4, 1.61, 0.05)
+
         if apply_mask:
             image = self.apply_white_mask(image)
 
@@ -159,32 +184,40 @@ class CardRecognizer:
         else:
             gray = image
 
+        if downscale > 1:
+            gray = cv2.resize(gray, (gray.shape[1] // downscale, gray.shape[0] // downscale))
+
         results = []
 
         for name, template in self.templates.items():
-            for scale in (0.5, 0.75, 1.0, 1.25, 1.5):
-                h, w = template.shape
-                new_h, new_w = int(h * scale), int(w * scale)
+            for angle in angles:
+                rotated = self._rotate_template(template, angle) if angle else template
 
-                if new_h > gray.shape[0] or new_w > gray.shape[1]:
-                    continue
+                for scale in scales:
+                    h, w = rotated.shape
+                    new_h, new_w = int(h * scale / downscale), int(w * scale / downscale)
 
-                if new_h < 10 or new_w < 10:
-                    continue
+                    if new_h > gray.shape[0] or new_w > gray.shape[1]:
+                        continue
 
-                scaled_template = cv2.resize(template, (new_w, new_h))
+                    if new_h < 10 or new_w < 10:
+                        continue
 
-                result = cv2.matchTemplate(gray, scaled_template, cv2.TM_CCOEFF_NORMED)
+                    scaled_template = cv2.resize(rotated, (new_w, new_h))
 
-                locations = np.where(result >= threshold)
+                    result = cv2.matchTemplate(gray, scaled_template, cv2.TM_CCOEFF_NORMED)
 
-                for pt in zip(*locations[::-1]):
-                    confidence = result[pt[1], pt[0]]
-                    results.append({
-                        'name': name,
-                        'confidence': float(confidence),
-                        'location': (pt[0], pt[1], new_w, new_h),
-                    })
+                    locations = np.where(result >= threshold)
+
+                    for pt in zip(*locations[::-1]):
+                        confidence = result[pt[1], pt[0]]
+                        results.append({
+                            'name': name,
+                            'confidence': float(confidence),
+                            'location': (pt[0] * downscale, pt[1] * downscale,
+                                         new_w * downscale, new_h * downscale),
+                            'angle': angle,
+                        })
 
         results = self._non_max_suppression(results)
 
@@ -214,8 +247,12 @@ class CardRecognizer:
                     intersection = (xi2 - xi1) * (yi2 - yi1)
                     union = w1 * h1 + w2 * h2 - intersection
                     iou = intersection / union
+                    # Same glyph matched at two scales gives nested boxes whose
+                    # IoU stays low; suppress by smaller-box coverage as well.
+                    smaller_area = min(w1 * h1, w2 * h2)
+                    coverage = intersection / smaller_area
 
-                    if iou > iou_threshold:
+                    if iou > iou_threshold or coverage > 0.7:
                         should_keep = False
                         break
 

@@ -59,6 +59,8 @@ class CardRecognizer:
         self.templates = {}
         self.model = None
         self.class_names = []
+        # (cache_key, template name) -> best matching scale, see template_match
+        self._scale_cache = {}
 
         self._load_templates()
 
@@ -144,6 +146,15 @@ class CardRecognizer:
         return tensor.to(device)
 
     @staticmethod
+    def _glyph_class(name):
+        """Group templates whose on-screen glyphs share a size."""
+        if name in ('Heart', 'Diamond', 'Spade', 'Cross'):
+            return 'suit'
+        if name in ('Joker', 'Wonder'):
+            return 'special'
+        return 'rank'
+
+    @staticmethod
     def _rotate_template(template, angle):
         """Rotate a template around its center, expanding the canvas so nothing is cut off."""
         h, w = template.shape
@@ -156,7 +167,7 @@ class CardRecognizer:
         return cv2.warpAffine(template, matrix, (new_w, new_h), borderValue=0)
 
     def template_match(self, image, threshold=0.7, apply_mask=True,
-                       scales=None, angles=(0,), downscale=1):
+                       scales=None, angles=(0,), downscale=1, cache_key=None):
         """
         Perform template matching to find cards in the image.
 
@@ -173,6 +184,12 @@ class CardRecognizer:
             downscale: Integer factor to shrink the search image by before
                 matching. 2 is ~16x faster and still reliable for the large
                 card glyphs; reported locations are in original coordinates.
+            cache_key: When set (e.g. 'hand'), the best matching scale per
+                template is remembered under this key and later calls only
+                sweep a small neighborhood around it. On-screen glyph sizes
+                are constant for a given resolution, so this is safe and
+                collapses the scale sweep after each template has been seen
+                confidently once.
 
         Returns:
             List of (name, confidence, location) tuples
@@ -193,11 +210,36 @@ class CardRecognizer:
 
         results = []
 
+        # On-screen glyph heights are consistent within a class (all rank
+        # glyphs are ~the same size), so templates already pinned by the
+        # cache give unseen templates of the same class a strong prior.
+        prior_heights = {}
+        if cache_key:
+            for (key, name), scale in self._scale_cache.items():
+                if key == cache_key and name in self.templates:
+                    glyph_class = self._glyph_class(name)
+                    prior_heights.setdefault(glyph_class, []).append(
+                        self.templates[name].shape[0] * scale)
+
         for name, template in self.templates.items():
+            cached_scale = self._scale_cache.get((cache_key, name)) if cache_key else None
+            if cached_scale is not None:
+                trial_scales = (cached_scale,)
+            else:
+                heights = prior_heights.get(self._glyph_class(name))
+                if heights:
+                    center = float(np.median(heights)) / template.shape[0]
+                    trial_scales = tuple(center + step for step in
+                                         (-0.10, -0.05, 0.0, 0.05, 0.10))
+                else:
+                    trial_scales = scales
+
+            best_confidence, best_scale = 0.0, None
+
             for angle in angles:
                 rotated = self._rotate_template(template, angle) if angle else template
 
-                for scale in scales:
+                for scale in trial_scales:
                     h, w = rotated.shape
                     new_h, new_w = int(h * scale / downscale), int(w * scale / downscale)
 
@@ -215,6 +257,8 @@ class CardRecognizer:
 
                     for pt in zip(*locations[::-1]):
                         confidence = result[pt[1], pt[0]]
+                        if confidence > best_confidence:
+                            best_confidence, best_scale = float(confidence), scale
                         results.append({
                             'name': name,
                             'confidence': float(confidence),
@@ -222,6 +266,11 @@ class CardRecognizer:
                                          new_w * downscale, new_h * downscale),
                             'angle': angle,
                         })
+
+            # Only very confident matches may pin the scale, so a noisy
+            # false positive cannot lock future sweeps to a wrong size.
+            if cache_key and cached_scale is None and best_confidence >= 0.85:
+                self._scale_cache[(cache_key, name)] = best_scale
 
         results = self._non_max_suppression(results)
 
@@ -396,6 +445,7 @@ HAND_MATCH_PARAMS = {
     'threshold': 0.75,
     'angles': range(-20, 21, 5),
     'downscale': 2,
+    'cache_key': 'hand',
 }
 
 

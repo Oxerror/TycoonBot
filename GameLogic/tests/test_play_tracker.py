@@ -92,6 +92,65 @@ class TestOpponentPlays:
             tracker.update([Card(Rank.NINE, Suit.CLUBS)], HAND)
 
 
+class TestKnownHand:
+    """Round-start bar validation gives the tracker the full own hand,
+    including clipped cards the reading never shows."""
+
+    READING = [Card(Rank.FIVE, Suit.SPADES), Card(Rank.KING, Suit.HEARTS)]
+    FULL = READING + [Card(Rank.JOKER)]
+
+    def test_clipped_joker_play_attributed_by_counter(self):
+        tracker, state = make_tracker()
+        tracker.set_known_hand(self.FULL)
+        tracker.update([], self.READING, player_cards_left=3)
+        events = tracker.update([Card(Rank.JOKER)], self.READING,
+                                player_cards_left=2)
+        assert events[0]['by_player'] is True
+        assert state.unseen[Rank.JOKER] == 2  # untouched: it was our card
+
+    def test_without_counter_clipped_play_counts_as_opponent(self):
+        """Documents the limitation: with no readable counter, a play
+        of a card the reading never showed looks like an opponent's."""
+        tracker, state = make_tracker()
+        tracker.set_known_hand(self.FULL)
+        tracker.update([], self.READING)
+        events = tracker.update([Card(Rank.JOKER)], self.READING)
+        assert events[0]['by_player'] is False
+        assert state.unseen[Rank.JOKER] == 1
+
+    def test_own_play_removed_from_known_hand(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand(self.FULL)
+        tracker.update([], self.READING, player_cards_left=3)
+        tracker.update([Card(Rank.FIVE, Suit.SPADES)],
+                       [Card(Rank.KING, Suit.HEARTS)], player_cards_left=2)
+        remaining = tracker.known_hand_cards()
+        assert (Rank.FIVE, Suit.SPADES) not in [(c.rank, c.suit) for c in remaining]
+        assert len(remaining) == 2
+
+    def test_played_placeholder_removed_by_rank(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand(self.FULL)
+        tracker.update([], self.READING, player_cards_left=3)
+        tracker.update([Card(Rank.JOKER)], self.READING, player_cards_left=2)
+        assert all(c.rank != Rank.JOKER for c in tracker.known_hand_cards())
+
+    def test_reading_upgrades_suitless_placeholder(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand([Card(Rank.FIVE, None), Card(Rank.KING, Suit.HEARTS)])
+        tracker.update([], [Card(Rank.FIVE, Suit.SPADES),
+                            Card(Rank.KING, Suit.HEARTS)])
+        assert (Rank.FIVE, Suit.SPADES) in [(c.rank, c.suit)
+                                            for c in tracker.known_hand_cards()]
+
+    def test_known_hand_cards_in_display_order(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand([Card(Rank.JOKER), Card(Rank.THREE, Suit.CLUBS),
+                                Card(Rank.WONDER), Card(Rank.TWO, Suit.HEARTS)])
+        ranks = [c.rank for c in tracker.known_hand_cards()]
+        assert ranks == [Rank.WONDER, Rank.THREE, Rank.TWO, Rank.JOKER]
+
+
 class TestOwnPlays:
     def test_own_play_does_not_touch_unseen(self):
         tracker, state = make_tracker()

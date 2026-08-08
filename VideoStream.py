@@ -4,6 +4,7 @@ import cv2
 import mss
 
 from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer, read_play_field
+from GameLogic.Card import Card
 from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
@@ -90,16 +91,18 @@ def videoCapturing():
             print(f"Current trick: {trick}")
 
         bar_counts = read_status_bar(frame)
+        counters = read_cards_left(frame)
+
         if bar_counts is None:
             print("Status bar: not visible")
         elif game_state is None:
             game_state = GameState.from_status_bar(bar_counts)
             tracker = PlayTracker(game_state)
-            tracker.update(trick, cards)
+            tracker.update(trick, cards, counters['player'])
             print(f"Tracking started: {game_state.total_unseen()} unseen cards")
         else:
             try:
-                for event in tracker.update(trick, cards):
+                for event in tracker.update(trick, cards, counters['player']):
                     who = 'we' if event['by_player'] else 'opponent'
                     print(f"Play observed ({who}): {event['cards']}")
             except ValueError as error:
@@ -120,12 +123,11 @@ def videoCapturing():
                     print("Re-syncing from the status bar.")
                     game_state = GameState.from_status_bar(bar_counts)
                     tracker = PlayTracker(game_state)
-                    tracker.update(trick, cards)
+                    tracker.update(trick, cards, counters['player'])
                     diverged_frames = 0
                 else:
                     print(f"State mismatch this frame ({diff}), waiting one frame")
 
-            counters = read_cards_left(frame)
             opponent_counts = [counters[k] for k in ('left', 'middle', 'right')]
             if None not in opponent_counts:
                 opponents_total = sum(opponent_counts)
@@ -134,19 +136,22 @@ def videoCapturing():
                           f"tracking says {game_state.total_unseen()}")
 
             # At round start nothing has been played, so deck - bar must
-            # equal the own hand — validates the hand reading and reveals
-            # the clipped cards at the fan edges.
+            # equal the own hand — validates the hand reading, reveals
+            # the clipped fan-edge cards and gives the tracker complete
+            # knowledge of the own hand.
             all_counts = list(counters.values())
             if None not in all_counts and sum(all_counts) == DECK_SIZE:
                 missing, extra = validate_start_hand(cards, bar_counts)
                 if extra:
                     print("WARNING: hand reading shows cards the bar rules out: "
                           + ", ".join(f"{r.name} x{n}" for r, n in extra.items()))
-                elif missing:
-                    print("Round start: hand validated; unread clipped cards: "
-                          + ", ".join(f"{r.name} x{n}" for r, n in missing.items()))
                 else:
-                    print("Round start: hand reading fully validated against the bar")
+                    recovered = [Card(rank) for rank, n in missing.items()
+                                 for _ in range(n)]
+                    tracker.set_known_hand(cards + recovered)
+                    print(f"Round start: full hand known: {tracker.known_hand_cards()}"
+                          + (f" ({len(recovered)} recovered from the bar)"
+                             if recovered else ""))
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

@@ -28,6 +28,7 @@ status-bar initialization of GameState.
 from collections import Counter
 
 from GameLogic.Card import Card, Rank
+from GameLogic.Rules import causes_revolution
 
 
 class PlayTracker:
@@ -40,6 +41,9 @@ class PlayTracker:
         # the bar whose suit was never readable. Empty until
         # set_known_hand is called.
         self.known_hand = Counter()
+        # Flipped by every observed four-card set. Note: a tracker
+        # re-created mid-round (bar re-sync) starts non-revolution.
+        self.revolution = False
         self.started = False
 
     @staticmethod
@@ -139,6 +143,9 @@ class PlayTracker:
                 self._remove_from_known_hand(new_cards)
             else:
                 self.game_state.observe_opponent_play(new_cards)
+
+            if causes_revolution(tuple(new_cards)):
+                self.revolution = not self.revolution
 
             events.append({'cards': new_cards, 'by_player': by_player})
 

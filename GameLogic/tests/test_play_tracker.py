@@ -151,6 +151,28 @@ class TestKnownHand:
         assert ranks == [Rank.WONDER, Rank.THREE, Rank.TWO, Rank.JOKER]
 
 
+class TestRevolutionTracking:
+    def test_four_card_play_flips_revolution(self):
+        tracker, _ = make_tracker()
+        tracker.update([], HAND)
+        quad = [Card(Rank.NINE, s) for s in Suit]
+        tracker.update(quad, HAND)
+        assert tracker.revolution is True
+
+    def test_second_quad_flips_back(self):
+        tracker, _ = make_tracker()
+        tracker.update([], HAND)
+        tracker.update([Card(Rank.NINE, s) for s in Suit], HAND)
+        tracker.update([Card(Rank.TEN, s) for s in Suit], HAND)
+        assert tracker.revolution is False
+
+    def test_normal_plays_do_not_flip(self):
+        tracker, _ = make_tracker()
+        tracker.update([], HAND)
+        tracker.update([Card(Rank.NINE, Suit.CLUBS)], HAND)
+        assert tracker.revolution is False
+
+
 class TestOwnPlays:
     def test_own_play_does_not_touch_unseen(self):
         tracker, state = make_tracker()

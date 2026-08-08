@@ -8,6 +8,7 @@ from GameLogic.Card import Card
 from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
+from GameLogic.Recommender import recommend
 from CardsLeftReader import read_cards_left
 from ScreenCapture import applyRedactions, cropRegion, getScreen, loadConfig
 from StatusBarReader import read_status_bar
@@ -152,6 +153,15 @@ def videoCapturing():
                     print(f"Round start: full hand known: {tracker.known_hand_cards()}"
                           + (f" ({len(recovered)} recovered from the bar)"
                              if recovered else ""))
+
+            # Recommendation for when it is our turn (turn detection is
+            # not built yet, so this prints every frame).
+            own_hand = tracker.known_hand_cards() if tracker.known_hand else cards
+            if own_hand:
+                move = recommend(own_hand, trick, tracker.revolution)
+                if tracker.revolution:
+                    print("REVOLUTION is active - strength order is flipped")
+                print(f"Suggested play: {list(move) if move else 'PASS'}")
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

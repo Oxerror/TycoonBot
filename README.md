@@ -83,9 +83,17 @@ game always displays the hand sorted (Wonder, 3..Ace, 2, Joker), which
 deck - bar = own hand, so `validate_start_hand()` proves the hand
 reading correct and recovers the cards clipped at the fan edges.
 
+Step 3 has begun: `GameLogic/Rules.py` encodes the Tycoon rules (equal
+rank sets with jokers as wildcards, revolution, 8-stop, the 3-Spade
+Reversal against a single Joker, and the Wonder winning any trick) and
+`GameLogic/Recommender.py` is a first heuristic recommender — finish
+when possible, lead weak, win cheap, save power cards — whose
+suggestion the capture loop prints each frame. Turn detection and a
+stronger (search/learning based) recommender are next.
+
 Known gaps: in dense fans the outermost cards are clipped beyond their
-emblems and are not read, and identical overlapping cards (a
-double-joker play) count as one. Steps 3-4 are not started. The
+emblems and are not read (recovered at round start via the bar), and
+identical overlapping cards (a double-joker play) count as one. The
 `CardCNN` model in `ImageRecognition.py` is an untrained skeleton.
 
 ## License

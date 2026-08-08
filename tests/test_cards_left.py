@@ -2,7 +2,8 @@ import cv2
 import numpy as np
 import pytest
 
-from CardsLeftReader import CardsLeftReader, read_cards_left
+from CardsLeftReader import (CardsLeftReader, read_cards_left,
+                             read_cards_left_detailed)
 from ImageRecognition import PROJECT_ROOT
 
 IMAGE_DIR = PROJECT_ROOT / 'Image'
@@ -33,11 +34,37 @@ class TestDigitTemplates:
             assert reader._classify_digit(template) == digit
 
 
+# Whose bubble carries the red your-turn marker in each fixture.
+EXPECTED_ACTIVE = {
+    'TestImage.png': 'right',
+    'TestImage2.png': 'right',
+    'TestImage5.png': 'right',
+    'TestImage6.png': 'right',
+    'TestImage7.png': 'left',
+    'TestImage8.png': 'middle',
+    'TestImage9.png': 'middle',
+}
+
+
 @pytest.mark.parametrize('image_name', sorted(EXPECTED))
 def test_reads_all_counters(image_name):
     image = cv2.imread(str(IMAGE_DIR / image_name))
     assert image is not None, f'missing test image {image_name}'
     assert read_cards_left(image) == EXPECTED[image_name]
+
+
+@pytest.mark.parametrize('image_name', sorted(EXPECTED_ACTIVE))
+def test_reads_active_player(image_name):
+    image = cv2.imread(str(IMAGE_DIR / image_name))
+    assert image is not None, f'missing test image {image_name}'
+    _, _, active = read_cards_left_detailed(image)
+    assert active == EXPECTED_ACTIVE[image_name]
+
+
+def test_no_active_player_on_blank_frame():
+    frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
+    _, _, active = read_cards_left_detailed(frame)
+    assert active is None
 
 
 def test_non_game_frame_reads_none():

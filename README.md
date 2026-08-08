@@ -87,9 +87,10 @@ Step 3 has begun: `GameLogic/Rules.py` encodes the Tycoon rules (equal
 rank sets with jokers as wildcards, revolution, 8-stop, the 3-Spade
 Reversal against a single Joker, and the Wonder winning any trick) and
 `GameLogic/Recommender.py` is a first heuristic recommender — finish
-when possible, lead weak, win cheap, save power cards — whose
-suggestion the capture loop prints each frame. Turn detection and a
-stronger (search/learning based) recommender are next.
+when possible, lead weak, win cheap, save power cards. The active
+player's bubble carries a red marker, which `CardsLeftReader` reads as
+turn detection, so the loop suggests a move exactly when it is your
+turn. A stronger (search/learning based) recommender is next.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

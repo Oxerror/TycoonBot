@@ -64,7 +64,8 @@ def frames_differ(frame_a, frame_b, threshold=2.0):
     return diff > threshold
 
 
-def save_frame(frame, reason, bar_counts, cards_left, unknown_digits):
+def save_frame(frame, reason, bar_counts, cards_left, unknown_digits,
+               active_player=None):
     CAPTURE_DIR.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -84,6 +85,7 @@ def save_frame(frame, reason, bar_counts, cards_left, unknown_digits):
                       if bar_counts is not None else None,
         'cards_left': cards_left,
         'unknown_digits': unknown_digits,
+        'active_player': active_player,
     }
     path.with_suffix('.json').write_text(json.dumps(sidecar, indent=2))
 
@@ -113,7 +115,7 @@ def captureLoop():
 
             now = time.monotonic()
             bar_counts = read_status_bar(frame)
-            cards_left, unknown_digits = read_cards_left_detailed(frame)
+            cards_left, unknown_digits, active_player = read_cards_left_detailed(frame)
 
             reason = None
             if bar_counts is not None and bar_counts != last_saved_bar:
@@ -124,7 +126,8 @@ def captureLoop():
                 reason = 'interval'
 
             if reason and frames_differ(frame, last_saved_frame):
-                path = save_frame(frame, reason, bar_counts, cards_left, unknown_digits)
+                path = save_frame(frame, reason, bar_counts, cards_left,
+                                  unknown_digits, active_player)
                 saved += 1
                 last_saved_bar = bar_counts
                 last_saved_frame = frame

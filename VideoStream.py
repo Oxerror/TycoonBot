@@ -9,7 +9,7 @@ from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from GameLogic.Recommender import recommend
-from CardsLeftReader import read_cards_left
+from CardsLeftReader import read_cards_left_detailed
 from ScreenCapture import applyRedactions, cropRegion, getScreen, loadConfig
 from StatusBarReader import read_status_bar
 
@@ -92,7 +92,7 @@ def videoCapturing():
             print(f"Current trick: {trick}")
 
         bar_counts = read_status_bar(frame)
-        counters = read_cards_left(frame)
+        counters, _, active_player = read_cards_left_detailed(frame)
 
         if bar_counts is None:
             print("Status bar: not visible")
@@ -154,14 +154,17 @@ def videoCapturing():
                           + (f" ({len(recovered)} recovered from the bar)"
                              if recovered else ""))
 
-            # Recommendation for when it is our turn (turn detection is
-            # not built yet, so this prints every frame).
-            own_hand = tracker.known_hand_cards() if tracker.known_hand else cards
-            if own_hand:
-                move = recommend(own_hand, trick, tracker.revolution)
-                if tracker.revolution:
-                    print("REVOLUTION is active - strength order is flipped")
-                print(f"Suggested play: {list(move) if move else 'PASS'}")
+            # The active player's bubble carries a red marker; suggest a
+            # move only when it is ours.
+            if tracker.revolution:
+                print("REVOLUTION is active - strength order is flipped")
+            if active_player == 'player':
+                own_hand = tracker.known_hand_cards() if tracker.known_hand else cards
+                if own_hand:
+                    move = recommend(own_hand, trick, tracker.revolution)
+                    print(f"YOUR TURN - suggested play: {list(move) if move else 'PASS'}")
+            elif active_player is not None:
+                print(f"Waiting: {active_player} opponent is playing")
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

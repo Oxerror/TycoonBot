@@ -8,6 +8,10 @@ the reference screenshots.
 
 The template set covers all ten digits. A blob that matches no
 template makes the affected counter read as None instead of guessing.
+
+The bubble also announces whose turn it is: the active player's bubble
+turns bright red while the others stay black. The area around the
+digits is sampled (ignoring the white text) to read that marker.
 """
 
 import cv2
@@ -35,6 +39,10 @@ DIGIT_SIZE = (32, 38)
 
 # Below this match score a blob is not any known digit.
 MIN_DIGIT_SCORE = 0.6
+
+# Mean (red - max(green, blue)) of the bubble area around the digits;
+# an active bubble measures ~250, an inactive one ~0.
+ACTIVE_BUBBLE_REDNESS = 100
 
 
 class CardsLeftReader:
@@ -80,21 +88,41 @@ class CardsLeftReader:
             return None
         return best_digit
 
+    @staticmethod
+    def _bubble_redness(crop, mask, blobs):
+        """Mean red dominance of the bubble area around the digits,
+        ignoring the white text pixels themselves."""
+        pad = 25
+        x1 = max(0, min(b[0] for b in blobs) - pad)
+        y1 = max(0, min(b[1] for b in blobs) - pad)
+        x2 = min(crop.shape[1], max(b[0] + b[2] for b in blobs) + pad)
+        y2 = min(crop.shape[0], max(b[1] + b[3] for b in blobs) + pad)
+
+        patch = crop[y1:y2, x1:x2].astype(np.int16)
+        background = patch[mask[y1:y2, x1:x2] == 0]
+        if background.size == 0:
+            return 0.0
+        blue, green, red = (background[:, 0].mean(),
+                            background[:, 1].mean(),
+                            background[:, 2].mean())
+        return red - max(green, blue)
+
     def read_detailed(self, frame):
         """
         Read every player's card counter from a full game frame.
 
         Returns:
-            Tuple (counts, unknown): counts maps {'left', 'middle',
-            'right', 'player'} to int or None when that counter is not
-            readable; unknown lists the players whose counter showed a
-            digit-sized blob that matched no known digit template —
-            exactly the frames worth capturing to extend the template
-            set (5, 6, 7 and 9 are still missing).
+            Tuple (counts, unknown, active): counts maps {'left',
+            'middle', 'right', 'player'} to int or None when that
+            counter is not readable; unknown lists the players whose
+            counter showed a digit-sized blob matching no known digit
+            template; active names the player whose bubble carries the
+            red your-turn marker, or None when no bubble does.
         """
         height, width = frame.shape[:2]
         counts = {}
         unknown = []
+        active = None
 
         for player, (fx1, fx2, fy1, fy2) in PLAYER_REGIONS.items():
             crop = frame[int(height * fy1):int(height * fy2),
@@ -106,6 +134,9 @@ class CardsLeftReader:
                 counts[player] = None
                 continue
 
+            if self._bubble_redness(crop, mask, blobs) > ACTIVE_BUBBLE_REDNESS:
+                active = player
+
             digits = [self._classify_digit(mask[y:y + h, x:x + w])
                       for x, y, w, h in blobs]
             if None in digits:
@@ -114,7 +145,7 @@ class CardsLeftReader:
             else:
                 counts[player] = int(''.join(str(d) for d in digits))
 
-        return counts, unknown
+        return counts, unknown, active
 
     def read(self, frame):
         """Like read_detailed, but returns only the counts dict."""

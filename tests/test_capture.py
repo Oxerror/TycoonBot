@@ -78,7 +78,7 @@ class TestUnknownDigitDetection:
         # it segments like a digit but matches no digit template.
         cv2.line(frame, (200, 242), (228, 276), (255, 255, 255), 5)
         cv2.line(frame, (228, 242), (200, 276), (255, 255, 255), 5)
-        counts, unknown = reader.read_detailed(frame)
+        counts, unknown, _ = reader.read_detailed(frame)
         assert counts['left'] is None
         assert unknown == ['left']
 
@@ -86,6 +86,6 @@ class TestUnknownDigitDetection:
         from CardsLeftReader import read_cards_left_detailed
         from ImageRecognition import PROJECT_ROOT
         image = cv2.imread(str(PROJECT_ROOT / 'Image' / 'TestImage.png'))
-        counts, unknown = read_cards_left_detailed(image)
+        counts, unknown, _ = read_cards_left_detailed(image)
         assert unknown == []
         assert counts['left'] == 14

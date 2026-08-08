@@ -49,9 +49,15 @@ pytest -m "not slow"  # skip the slow image-matching integration tests
 
 Step 1 (recognizing the cards in your hand) works: template matching
 finds the rank and suit glyphs (the fanned hand needs a rotation sweep),
-and `GameLogic/HandReader.py` pairs them into `Card` objects. Steps 2-4
-are not started. The `CardCNN` model in `ImageRecognition.py` is an
-untrained skeleton for later.
+and `GameLogic/HandReader.py` pairs them into `Card` objects.
+
+`StatusBarReader.py` reads the remaining-cards-per-rank bar at the top
+of the screen. This is public information the bot will later track
+itself from observed plays, so the reader is only a verification tool
+to check the tracked state against the game.
+
+Steps 2-4 are not started. The `CardCNN` model in
+`ImageRecognition.py` is an untrained skeleton for later.
 
 ## License
 

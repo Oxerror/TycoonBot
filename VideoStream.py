@@ -8,6 +8,7 @@ import numpy as np
 
 from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer
 from GameLogic.HandReader import detections_to_cards
+from StatusBarReader import read_status_bar
 
 PROJECT_ROOT = Path(__file__).parent
 CONFIG_PATH = PROJECT_ROOT / 'config.json'
@@ -116,6 +117,15 @@ def videoCapturing():
         handWithDetections = drawDetections(currentHand, detections)
 
         print(f"Hand ({elapsed:.1f}s): {cards}")
+
+        # Verification only: the bar shows public information the bot
+        # will eventually track itself from observed plays.
+        counts = read_status_bar(frame)
+        if counts is None:
+            print("Status bar: not visible")
+        else:
+            print("Status bar: " + "  ".join(
+                f"{rank.name}:{count}" for rank, count in counts.items()))
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

@@ -81,16 +81,21 @@ class CardsLeftReader:
             return None
         return best_digit
 
-    def read(self, frame):
+    def read_detailed(self, frame):
         """
         Read every player's card counter from a full game frame.
 
         Returns:
-            Dict {'left', 'middle', 'right', 'player'} -> int or None
-            when that counter is not visible or a digit is unknown.
+            Tuple (counts, unknown): counts maps {'left', 'middle',
+            'right', 'player'} to int or None when that counter is not
+            readable; unknown lists the players whose counter showed a
+            digit-sized blob that matched no known digit template —
+            exactly the frames worth capturing to extend the template
+            set (5, 6, 7 and 9 are still missing).
         """
         height, width = frame.shape[:2]
         counts = {}
+        unknown = []
 
         for player, (fx1, fx2, fy1, fy2) in PLAYER_REGIONS.items():
             crop = frame[int(height * fy1):int(height * fy2),
@@ -106,10 +111,15 @@ class CardsLeftReader:
                       for x, y, w, h in blobs]
             if None in digits:
                 counts[player] = None
+                unknown.append(player)
             else:
                 counts[player] = int(''.join(str(d) for d in digits))
 
-        return counts
+        return counts, unknown
+
+    def read(self, frame):
+        """Like read_detailed, but returns only the counts dict."""
+        return self.read_detailed(frame)[0]
 
 
 _reader = None
@@ -121,3 +131,11 @@ def read_cards_left(frame):
     if _reader is None:
         _reader = CardsLeftReader()
     return _reader.read(frame)
+
+
+def read_cards_left_detailed(frame):
+    """Like read_cards_left, but also returns the unknown-digit players."""
+    global _reader
+    if _reader is None:
+        _reader = CardsLeftReader()
+    return _reader.read_detailed(frame)

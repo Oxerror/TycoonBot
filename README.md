@@ -33,6 +33,18 @@ python VideoStream.py
 Which monitor and which screen regions are used is set in `config.json`
 (`monitor`: mss index, 1 = primary; regions are fractions of the frame).
 
+**Collect training data** — run alongside the game to gather real
+frames for tests and templates:
+```sh
+python CaptureData.py
+```
+Saves one frame per play (triggered by status-bar changes) plus frames
+whose "Cards Left" counters show digits the templates don't know yet,
+to `Image/captures/` (gitignored) with a JSON sidecar of auto-labels.
+The `redact_regions` in `config.json` are blacked out before saving so
+the platform user id never reaches the disk — calibrate the region
+once against a live frame before publishing captured images.
+
 **Offline test** — runs recognition on the screenshots in `Image/` and
 saves annotated copies:
 ```sh

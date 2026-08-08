@@ -14,3 +14,6 @@ __pycache__/
 
 # Generated detection outputs
 Image/*_detected.*
+
+# Raw gameplay captures (promote good frames to Image/ by hand)
+Image/captures/

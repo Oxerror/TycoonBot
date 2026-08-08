@@ -51,10 +51,12 @@ Step 1 (recognizing the cards in your hand) works: template matching
 finds the rank and suit glyphs (the fanned hand needs a rotation sweep),
 and `GameLogic/HandReader.py` pairs them into `Card` objects.
 
-`StatusBarReader.py` reads the remaining-cards-per-rank bar at the top
-of the screen. This is public information the bot will later track
-itself from observed plays, so the reader is only a verification tool
-to check the tracked state against the game.
+For step 2, `GameLogic/GameState.py` tracks the unseen cards per rank
+(the opponents' hands) and is updated by observed plays.
+`StatusBarReader.py` reads the remaining-cards bar at the top of the
+screen — public information the bot tracks itself anyway — so the bar
+is used only as ground truth: `GameState.verify_against()` flags every
+rank where the bot's bookkeeping diverged from the game.
 
 Steps 2-4 are not started. The `CardCNN` model in
 `ImageRecognition.py` is an untrained skeleton for later.

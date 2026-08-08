@@ -7,6 +7,7 @@ import mss
 import numpy as np
 
 from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer
+from GameLogic.GameState import GameState
 from GameLogic.HandReader import detections_to_cards
 from StatusBarReader import read_status_bar
 
@@ -100,6 +101,11 @@ def videoCapturing():
     recognizer = get_recognizer()
     sct = mss.mss()
 
+    # Tracked state, initialized from the first readable status bar.
+    # The bot will keep this updated from observed plays; the bar read
+    # is only the ground truth to verify the bookkeeping against.
+    game_state = None
+
     print("Capturing... press 'q' in a window to quit.")
     print("(Recognition takes a few seconds per frame.)")
 
@@ -118,14 +124,23 @@ def videoCapturing():
 
         print(f"Hand ({elapsed:.1f}s): {cards}")
 
-        # Verification only: the bar shows public information the bot
-        # will eventually track itself from observed plays.
-        counts = read_status_bar(frame)
-        if counts is None:
+        bar_counts = read_status_bar(frame)
+        if bar_counts is None:
             print("Status bar: not visible")
+        elif game_state is None:
+            game_state = GameState.from_status_bar(bar_counts)
+            print(f"Tracking started: {game_state.total_unseen()} unseen cards")
         else:
-            print("Status bar: " + "  ".join(
-                f"{rank.name}:{count}" for rank, count in counts.items()))
+            mismatches = game_state.verify_against(bar_counts)
+            if not mismatches:
+                print("State verified: tracking matches the game")
+            else:
+                # Until play observation exists, mismatches simply mean
+                # cards were played since tracking started; re-sync so
+                # the check stays meaningful frame to frame.
+                diff = ', '.join(f"{r.name} {t}->{a}" for r, (t, a) in mismatches.items())
+                print(f"State diverged ({diff}), re-syncing from bar")
+                game_state = GameState.from_status_bar(bar_counts)
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

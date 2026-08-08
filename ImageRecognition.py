@@ -449,6 +449,17 @@ HAND_MATCH_PARAMS = {
 }
 
 
+# Cards are tossed onto the table with up to ~20 degrees of rotation.
+# The game dims previous tricks, so the white mask naturally isolates
+# the current (bright) trick — older plays fall below the mask threshold.
+FIELD_MATCH_PARAMS = {
+    'threshold': 0.75,
+    'angles': range(-20, 21, 5),
+    'downscale': 2,
+    'cache_key': 'field',
+}
+
+
 def read_hand(image):
     """
     Recognize the cards in a hand-region screenshot.
@@ -463,6 +474,26 @@ def read_hand(image):
 
     recognizer = get_recognizer()
     detections = recognizer.template_match(image, **HAND_MATCH_PARAMS)
+    return detections_to_cards(detections)
+
+
+def read_play_field(image):
+    """
+    Recognize the cards of the current trick on the table.
+
+    Only the bright (most recent) trick survives the white mask; the
+    game dims earlier plays, so those drop out on their own.
+
+    Args:
+        image: BGR image of the play-field area
+
+    Returns:
+        List of GameLogic Card objects, sorted left to right
+    """
+    from GameLogic.HandReader import detections_to_cards
+
+    recognizer = get_recognizer()
+    detections = recognizer.template_match(image, **FIELD_MATCH_PARAMS)
     return detections_to_cards(detections)
 
 

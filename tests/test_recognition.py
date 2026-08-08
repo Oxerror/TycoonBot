@@ -13,7 +13,7 @@ import pytest
 
 from GameLogic.Card import Rank, Suit
 from GameLogic.HandReader import detections_to_cards
-from ImageRecognition import CardRecognizer, PROJECT_ROOT, read_hand
+from ImageRecognition import CardRecognizer, PROJECT_ROOT, read_hand, read_play_field
 
 IMAGE_DIR = PROJECT_ROOT / 'Image'
 
@@ -124,3 +124,27 @@ def test_reads_full_hand_from_screenshot(image_name):
     got = [(c.rank, c.suit) for c in cards
            if c.rank not in (Rank.JOKER, Rank.WONDER)]
     assert got == EXPECTED_HANDS[image_name]
+
+
+# The game dims earlier plays, so only the current (bright) trick is
+# expected. In TestImage the 5-5 pair is still bright alongside the
+# just-played Joker; the 5 of clubs' rank glyph is too eroded to read.
+EXPECTED_TRICKS = {
+    'TestImage.png': [(Rank.FIVE, Suit.HEARTS), (Rank.JOKER, None)],
+    'TestImage2.png': [(Rank.TWO, Suit.HEARTS)],
+}
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize('image_name', sorted(EXPECTED_TRICKS))
+def test_reads_current_trick_from_screenshot(image_name):
+    image = cv2.imread(str(IMAGE_DIR / image_name))
+    assert image is not None, f'missing test image {image_name}'
+
+    height, width = image.shape[:2]
+    field_region = image[int(height * 0.4):int(height * 0.8),
+                         int(width * 0.333):int(width * 0.667)]
+
+    cards = read_play_field(field_region)
+
+    assert [(c.rank, c.suit) for c in cards] == EXPECTED_TRICKS[image_name]

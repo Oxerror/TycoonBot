@@ -47,19 +47,27 @@ pytest -m "not slow"  # skip the slow image-matching integration tests
 
 ## Status
 
-Step 1 (recognizing the cards in your hand) works: template matching
-finds the rank and suit glyphs (the fanned hand needs a rotation sweep),
-and `GameLogic/HandReader.py` pairs them into `Card` objects.
+Step 1 (recognizing the cards) works: template matching finds the rank
+and suit glyphs in the hand (the fan needs a rotation sweep) and on the
+play field, where the game conveniently dims earlier plays so only the
+current trick stays readable. `GameLogic/HandReader.py` pairs the
+glyphs into `Card` objects. Matching scales are cached per template
+after the first confident hit, so warm frames take ~1-2s instead of ~7s.
 
-For step 2, `GameLogic/GameState.py` tracks the unseen cards per rank
-(the opponents' hands) and is updated by observed plays.
-`StatusBarReader.py` reads the remaining-cards bar at the top of the
-screen — public information the bot tracks itself anyway — so the bar
-is used only as ground truth: `GameState.verify_against()` flags every
-rank where the bot's bookkeeping diverged from the game.
+Step 2 (tracking the game) is running: `GameLogic/GameState.py` tracks
+the unseen cards per rank (the opponents' hands),
+`GameLogic/PlayTracker.py` diffs consecutive play-field readings to
+observe plays (own plays are recognized by cards leaving the hand and
+don't touch the unseen counts), and `CardsLeftReader.py` reads each
+player's "Cards Left" bubble. The top status bar — public information
+the bot tracks itself anyway — serves only as ground truth:
+`GameState.verify_against()` raises an alarm in the capture loop when
+the bookkeeping diverges from the game.
 
-Steps 2-4 are not started. The `CardCNN` model in
-`ImageRecognition.py` is an untrained skeleton for later.
+Known gaps: the bubble digit templates only cover 0-4 and 8 (the other
+digits don't appear in the reference screenshots yet), and cards
+clipped at the fan edges are not read. Steps 3-4 are not started. The
+`CardCNN` model in `ImageRecognition.py` is an untrained skeleton.
 
 ## License
 

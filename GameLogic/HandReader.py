@@ -39,6 +39,29 @@ def _center(detection):
     return (x + w / 2, y + h / 2)
 
 
+def _display_key(card):
+    """Position of a card in the game's hand display order.
+
+    The game always shows the hand sorted: Wonder leftmost, then game
+    order (3 lowest up to Ace, then 2), Joker rightmost. Rank values
+    already encode 3..2..Joker; only Wonder displays out of rank order.
+    """
+    if card.rank == Rank.WONDER:
+        return 0
+    return card.rank.value
+
+
+def hand_is_ordered(cards):
+    """
+    True when a hand reading respects the game's display order.
+
+    The game keeps the hand sorted, so a left-to-right reading that is
+    out of order proves at least one card was misrecognized.
+    """
+    keys = [_display_key(card) for card in cards]
+    return all(a <= b for a, b in zip(keys, keys[1:]))
+
+
 def detections_to_cards(detections):
     """
     Pair rank and suit detections into Card objects.

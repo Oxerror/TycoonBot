@@ -132,6 +132,15 @@ EXPECTED_HANDS = {
     ],
     # Player already went out: the hand area is empty.
     'TestImage7.png': [],
+    # Small hand where the Wonder and Joker emblems are fully visible.
+    'TestImage8.png': [
+        (Rank.WONDER, None),
+        (Rank.SEVEN, Suit.DIAMONDS),
+        (Rank.EIGHT, Suit.HEARTS),
+        (Rank.QUEEN, Suit.CLUBS),
+        (Rank.KING, Suit.CLUBS),
+        (Rank.JOKER, None),
+    ],
 }
 
 
@@ -140,8 +149,9 @@ EXPECTED_HANDS = {
 def test_reads_full_hand_from_screenshot(image_name):
     """End to end: screenshot -> detections -> Cards.
 
-    Only the fully visible cards are expected; the fan clips the
-    outermost cards (Wonder/Joker) so those may or may not be found.
+    Only the recognizable cards are expected: in dense fans the
+    outermost cards (Wonder/Joker) are clipped beyond their emblems and
+    are absent from the expectations of those fixtures.
     """
     image = cv2.imread(str(IMAGE_DIR / image_name))
     assert image is not None, f'missing test image {image_name}'
@@ -151,9 +161,7 @@ def test_reads_full_hand_from_screenshot(image_name):
 
     cards = read_hand(hand_region)
 
-    got = [(c.rank, c.suit) for c in cards
-           if c.rank not in (Rank.JOKER, Rank.WONDER)]
-    assert got == EXPECTED_HANDS[image_name]
+    assert [(c.rank, c.suit) for c in cards] == EXPECTED_HANDS[image_name]
 
 
 # The game dims earlier plays, so only the current (bright) trick is
@@ -167,6 +175,7 @@ EXPECTED_TRICKS = {
     # front card, so only one Joker is detectable.
     'TestImage6.png': [(Rank.JOKER, None)],
     'TestImage7.png': [(Rank.EIGHT, Suit.HEARTS), (Rank.EIGHT, Suit.SPADES)],
+    'TestImage8.png': [(Rank.EIGHT, Suit.SPADES)],
 }
 
 

@@ -5,7 +5,7 @@ import mss
 
 from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer, read_play_field
 from GameLogic.GameState import GameState
-from GameLogic.HandReader import detections_to_cards
+from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from CardsLeftReader import read_cards_left
 from ScreenCapture import applyRedactions, cropRegion, getScreen, loadConfig
@@ -82,6 +82,10 @@ def videoCapturing():
         handWithDetections = drawDetections(currentHand, detections)
 
         print(f"Hand ({elapsed:.1f}s): {cards}")
+        if not hand_is_ordered(cards):
+            # The game always displays the hand sorted, so an unordered
+            # reading proves at least one card was misrecognized.
+            print("WARNING: hand reading is out of display order - likely a misread")
         if trick:
             print(f"Current trick: {trick}")
 

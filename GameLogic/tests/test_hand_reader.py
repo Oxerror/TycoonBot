@@ -2,8 +2,8 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-from GameLogic.Card import Rank, Suit
-from GameLogic.HandReader import detections_to_cards
+from GameLogic.Card import Card, Rank, Suit
+from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 
 
 def det(name, x, y, w=40, h=50, confidence=0.9):
@@ -90,6 +90,52 @@ class TestSpecialCards:
     def test_wonder_needs_no_suit(self):
         cards = detections_to_cards([det('Wonder', 100, 10)])
         assert as_tuples(cards) == [(Rank.WONDER, None)]
+
+
+class TestHandIsOrdered:
+    """The game displays hands sorted: Wonder, 3..Ace, 2, Joker."""
+
+    def test_sorted_hand_with_specials(self):
+        assert hand_is_ordered([
+            Card(Rank.WONDER),
+            Card(Rank.THREE, Suit.HEARTS),
+            Card(Rank.ACE, Suit.SPADES),
+            Card(Rank.TWO, Suit.CLUBS),
+            Card(Rank.JOKER),
+        ])
+
+    def test_two_after_ace_is_ordered(self):
+        assert hand_is_ordered([
+            Card(Rank.ACE, Suit.SPADES),
+            Card(Rank.TWO, Suit.CLUBS),
+        ])
+
+    def test_two_before_ace_is_not_ordered(self):
+        assert not hand_is_ordered([
+            Card(Rank.TWO, Suit.CLUBS),
+            Card(Rank.ACE, Suit.SPADES),
+        ])
+
+    def test_wonder_not_leftmost_is_not_ordered(self):
+        assert not hand_is_ordered([
+            Card(Rank.THREE, Suit.HEARTS),
+            Card(Rank.WONDER),
+        ])
+
+    def test_joker_before_two_is_not_ordered(self):
+        assert not hand_is_ordered([
+            Card(Rank.JOKER),
+            Card(Rank.TWO, Suit.CLUBS),
+        ])
+
+    def test_pairs_are_ordered(self):
+        assert hand_is_ordered([
+            Card(Rank.FIVE, Suit.HEARTS),
+            Card(Rank.FIVE, Suit.SPADES),
+        ])
+
+    def test_empty_hand_is_ordered(self):
+        assert hand_is_ordered([])
 
 
 class TestOrdering:

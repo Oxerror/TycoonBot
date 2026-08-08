@@ -10,6 +10,8 @@ import os
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
+PROJECT_ROOT = Path(__file__).parent
+
 
 class CardCNN(nn.Module):
     """
@@ -50,7 +52,9 @@ class CardRecognizer:
     Main class for card recognition using PyTorch.
     Supports both template matching (fast) and CNN-based recognition (more accurate).
     """
-    def __init__(self, template_dir='Image/templates', model_path=None):
+    def __init__(self, template_dir=None, model_path=None):
+        if template_dir is None:
+            template_dir = PROJECT_ROOT / 'Image' / 'templates'
         self.template_dir = Path(template_dir)
         self.templates = {}
         self.model = None
@@ -382,6 +386,34 @@ def recognizeWithTemplates(image, threshold=0.7, apply_mask=True):
     elif isinstance(results, dict):
         return [results['name']]
     return []
+
+
+# Parameters tuned on the committed gameplay screenshots: the hand fan
+# rotates cards up to ~20 degrees and the templates were cropped at
+# inconsistent sizes, so matching needs an angle sweep and a fine scale
+# sweep; downscale keeps that affordable.
+HAND_MATCH_PARAMS = {
+    'threshold': 0.75,
+    'angles': range(-20, 21, 5),
+    'downscale': 2,
+}
+
+
+def read_hand(image):
+    """
+    Recognize the cards in a hand-region screenshot.
+
+    Args:
+        image: BGR image of the player's hand area
+
+    Returns:
+        List of GameLogic Card objects, sorted left to right
+    """
+    from GameLogic.HandReader import detections_to_cards
+
+    recognizer = get_recognizer()
+    detections = recognizer.template_match(image, **HAND_MATCH_PARAMS)
+    return detections_to_cards(detections)
 
 
 def recognizeWithCNN(image):

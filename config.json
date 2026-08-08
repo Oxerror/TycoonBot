@@ -3,7 +3,7 @@
     "hand_region": {"top": 0.75, "bottom": 1.0, "left": 0.0, "right": 1.0},
     "play_field": {"top": 0.4, "bottom": 0.8, "left": 0.333, "right": 0.667},
     "redact_regions": [
-        {"top": 0.92, "bottom": 1.0, "left": 0.78, "right": 1.0}
+        {"top": 0.96, "bottom": 1.0, "left": 0.853, "right": 1.0}
     ],
     "capture": {
         "interval_seconds": 45,

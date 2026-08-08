@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
     # bottom-right corner. Solid black is irreversible (unlike blur)
     # and reads as background for the recognition mask.
     'redact_regions': [
-        {'top': 0.92, 'bottom': 1.0, 'left': 0.78, 'right': 1.0},
+        {'top': 0.96, 'bottom': 1.0, 'left': 0.853, 'right': 1.0},
     ],
 }
 

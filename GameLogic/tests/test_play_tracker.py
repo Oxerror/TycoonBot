@@ -151,6 +151,34 @@ class TestKnownHand:
         assert ranks == [Rank.WONDER, Rank.THREE, Rank.TWO, Rank.JOKER]
 
 
+class TestResync:
+    def test_resync_preserves_known_hand_and_revolution(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand(HAND + [Card(Rank.JOKER)])
+        tracker.update([], HAND)
+        tracker.update([Card(Rank.NINE, s) for s in Suit], HAND)
+        assert tracker.revolution is True
+
+        fresh_state = GameState(full_counts(NINE=0))
+        tracker.resync(fresh_state, [Card(Rank.QUEEN, Suit.SPADES)], HAND)
+
+        assert tracker.revolution is True
+        assert len(tracker.known_hand_cards()) == 3
+        assert tracker.game_state is fresh_state
+
+    def test_field_at_resync_is_not_observed_again(self):
+        tracker, _ = make_tracker()
+        tracker.update([], HAND)
+
+        fresh_state = GameState(full_counts())
+        trick = [Card(Rank.QUEEN, Suit.SPADES)]
+        tracker.resync(fresh_state, trick, HAND)
+
+        events = tracker.update(trick, HAND)
+        assert events == []
+        assert fresh_state.unseen[Rank.QUEEN] == 4
+
+
 class TestRevolutionTracking:
     def test_four_card_play_flips_revolution(self):
         tracker, _ = make_tracker()

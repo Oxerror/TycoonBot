@@ -3,15 +3,8 @@ import time
 import cv2
 import mss
 
-from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer, read_play_field
-from GameLogic.Card import Card
-from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
-from GameLogic.HandReader import detections_to_cards, hand_is_ordered
-from GameLogic.PlayTracker import PlayTracker
-from GameLogic.Recommender import recommend
-from CardsLeftReader import read_cards_left_detailed
-from ScreenCapture import applyRedactions, cropRegion, getScreen, loadConfig
-from StatusBarReader import read_status_bar
+from ScreenCapture import applyRedactions, getScreen, loadConfig
+from Session import TycoonSession
 
 
 def drawDetections(image, detections):
@@ -56,15 +49,8 @@ def drawDetections(image, detections):
 
 def videoCapturing():
     config = loadConfig()
-    recognizer = get_recognizer()
+    session = TycoonSession(config)
     sct = mss.mss()
-
-    # Tracked state, initialized from the first readable status bar and
-    # kept current by observed plays. The bar is only read as ground
-    # truth: a persistent divergence means the bot messed up.
-    game_state = None
-    tracker = None
-    diverged_frames = 0
 
     print("Capturing... press 'q' in a window to quit.")
 
@@ -72,102 +58,16 @@ def videoCapturing():
         frame = getScreen(sct, config['monitor'])
         applyRedactions(frame, config['redact_regions'])
 
-        playField = cropRegion(frame, config['play_field'])
-        currentHand = cropRegion(frame, config['hand_region'])
-
         start = time.time()
-        detections = recognizer.template_match(currentHand, **HAND_MATCH_PARAMS)
-        cards = detections_to_cards(detections)
-        trick = read_play_field(playField)
+        messages, detections, (hand_region, field_region) = session.process_frame(frame)
         elapsed = time.time() - start
 
-        handWithDetections = drawDetections(currentHand, detections)
+        print(f"--- frame ({elapsed:.1f}s)")
+        for message in messages:
+            print(message)
 
-        print(f"Hand ({elapsed:.1f}s): {cards}")
-        if not hand_is_ordered(cards):
-            # The game always displays the hand sorted, so an unordered
-            # reading proves at least one card was misrecognized.
-            print("WARNING: hand reading is out of display order - likely a misread")
-        if trick:
-            print(f"Current trick: {trick}")
-
-        bar_counts = read_status_bar(frame)
-        counters, _, active_player = read_cards_left_detailed(frame)
-
-        if bar_counts is None:
-            print("Status bar: not visible")
-        elif game_state is None:
-            game_state = GameState.from_status_bar(bar_counts)
-            tracker = PlayTracker(game_state)
-            tracker.update(trick, cards, counters['player'])
-            print(f"Tracking started: {game_state.total_unseen()} unseen cards")
-        else:
-            try:
-                for event in tracker.update(trick, cards, counters['player']):
-                    who = 'we' if event['by_player'] else 'opponent'
-                    print(f"Play observed ({who}): {event['cards']}")
-            except ValueError as error:
-                print(f"ALARM: impossible play observed - {error}")
-
-            mismatches = game_state.verify_against(bar_counts)
-            if not mismatches:
-                diverged_frames = 0
-                print("State verified: tracking matches the game")
-            else:
-                # One divergent frame can be a play caught mid-animation;
-                # a persistent one means the bot lost track of the game.
-                diverged_frames += 1
-                diff = ', '.join(f"{r.name} {t}->{a}"
-                                 for r, (t, a) in mismatches.items())
-                if diverged_frames >= 2:
-                    print(f"ALARM: bot state diverged from the game ({diff})")
-                    print("Re-syncing from the status bar.")
-                    game_state = GameState.from_status_bar(bar_counts)
-                    tracker = PlayTracker(game_state)
-                    tracker.update(trick, cards, counters['player'])
-                    diverged_frames = 0
-                else:
-                    print(f"State mismatch this frame ({diff}), waiting one frame")
-
-            opponent_counts = [counters[k] for k in ('left', 'middle', 'right')]
-            if None not in opponent_counts:
-                opponents_total = sum(opponent_counts)
-                if opponents_total != game_state.total_unseen():
-                    print(f"Cards-left cross-check: bubbles say {opponents_total}, "
-                          f"tracking says {game_state.total_unseen()}")
-
-            # At round start nothing has been played, so deck - bar must
-            # equal the own hand — validates the hand reading, reveals
-            # the clipped fan-edge cards and gives the tracker complete
-            # knowledge of the own hand.
-            all_counts = list(counters.values())
-            if None not in all_counts and sum(all_counts) == DECK_SIZE:
-                missing, extra = validate_start_hand(cards, bar_counts)
-                if extra:
-                    print("WARNING: hand reading shows cards the bar rules out: "
-                          + ", ".join(f"{r.name} x{n}" for r, n in extra.items()))
-                else:
-                    recovered = [Card(rank) for rank, n in missing.items()
-                                 for _ in range(n)]
-                    tracker.set_known_hand(cards + recovered)
-                    print(f"Round start: full hand known: {tracker.known_hand_cards()}"
-                          + (f" ({len(recovered)} recovered from the bar)"
-                             if recovered else ""))
-
-            # The active player's bubble carries a red marker; suggest a
-            # move only when it is ours.
-            if tracker.revolution:
-                print("REVOLUTION is active - strength order is flipped")
-            if active_player == 'player':
-                own_hand = tracker.known_hand_cards() if tracker.known_hand else cards
-                if own_hand:
-                    move = recommend(own_hand, trick, tracker.revolution)
-                    print(f"YOUR TURN - suggested play: {list(move) if move else 'PASS'}")
-            elif active_player is not None:
-                print(f"Waiting: {active_player} opponent is playing")
-
-        cv2.imshow('Field', playField)
-        cv2.imshow('Hand', handWithDetections)
+        cv2.imshow('Field', field_region)
+        cv2.imshow('Hand', drawDetections(hand_region, detections))
 
         # imshow windows stay responsive only while waitKey pumps events
         if cv2.waitKey(500) & 0xFF == ord('q'):

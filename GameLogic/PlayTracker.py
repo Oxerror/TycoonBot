@@ -59,6 +59,25 @@ class PlayTracker:
         cards recovered from the status bar)."""
         self.known_hand = Counter(self._key(card) for card in cards)
 
+    def resync(self, game_state, field_cards, hand_cards, player_cards_left=None):
+        """
+        Adopt a fresh GameState after the tracked one diverged.
+
+        Divergence means plays were missed, so the unseen counts come
+        from the bar again — but the own-hand knowledge and revolution
+        state are independent of that and survive. Whatever lies on the
+        field is absorbed as already-played so it is not observed
+        against the new state a second time.
+        """
+        self.game_state = game_state
+        for card in field_cards:
+            key = self._key(card)
+            if self.seen_on_field[key] < self._copies(card.rank):
+                self.seen_on_field[key] += 1
+        self.previous_hand = Counter(self._key(card) for card in hand_cards)
+        if player_cards_left is not None:
+            self.previous_player_count = player_cards_left
+
     def known_hand_cards(self):
         """The tracked own hand as Cards in the game's display order."""
         cards = [Card(rank, suit)

@@ -13,7 +13,48 @@ information the game keeps showing anyway, it doubles as ground truth:
 reports every rank where the bot's bookkeeping went wrong.
 """
 
+from collections import Counter
+
 from GameLogic.Card import Rank
+
+# The Tycoon deck: four of each normal rank, two Jokers, two Wonders.
+FULL_DECK = {rank: 4 for rank in Rank}
+FULL_DECK[Rank.JOKER] = 2
+FULL_DECK[Rank.WONDER] = 2
+DECK_SIZE = sum(FULL_DECK.values())  # 56
+
+
+def expected_hand_ranks(bar_counts):
+    """
+    Derive the own hand's rank counts from a round-start bar reading.
+
+    At the start of a round nothing has been played, so every card the
+    bar does not count must be in the own hand: deck - bar = hand.
+    """
+    return {rank: FULL_DECK[rank] - bar_counts[rank] for rank in Rank}
+
+
+def validate_start_hand(hand_cards, bar_counts):
+    """
+    Check a hand reading against a round-start bar reading.
+
+    Args:
+        hand_cards: Cards from read_hand
+        bar_counts: dict from StatusBarReader.read() taken before any
+            card was played this round
+
+    Returns:
+        Tuple (missing, extra) of {Rank: count} dicts. `missing` lists
+        cards the bar proves are in the hand but the reading lacks
+        (typically the clipped cards at the fan edges); `extra` lists
+        read cards the bar says cannot be there (misreads).
+    """
+    expected = expected_hand_ranks(bar_counts)
+    got = Counter(card.rank for card in hand_cards)
+
+    missing = {r: expected[r] - got[r] for r in Rank if expected[r] > got[r]}
+    extra = {r: got[r] - expected[r] for r in Rank if got[r] > expected[r]}
+    return missing, extra
 
 
 class GameState:

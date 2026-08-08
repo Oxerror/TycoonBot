@@ -76,10 +76,12 @@ the bot tracks itself anyway — serves only as ground truth:
 `GameState.verify_against()` raises an alarm in the capture loop when
 the bookkeeping diverges from the game.
 
-All 54 cards are recognized (Joker and Wonder via their distinctive
-emblem art). The game always displays the hand sorted (Wonder, 3..Ace,
-2, Joker), which `hand_is_ordered()` uses as a misread detector in the
-capture loop.
+All 56 cards are recognized (four per rank plus two Jokers and two
+Wonders; the specials match via their distinctive emblem art). The
+game always displays the hand sorted (Wonder, 3..Ace, 2, Joker), which
+`hand_is_ordered()` uses as a misread detector, and at round start
+deck - bar = own hand, so `validate_start_hand()` proves the hand
+reading correct and recovers the cards clipped at the fan edges.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read, and identical overlapping cards (a

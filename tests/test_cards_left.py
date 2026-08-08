@@ -17,6 +17,8 @@ EXPECTED = {
     # bar cross-check exposed (bar total 17 vs a claimed 7+4+8).
     'TestImage7.png': {'left': 7, 'middle': 4, 'right': 6, 'player': 0},
     'TestImage8.png': {'left': 8, 'middle': 6, 'right': 10, 'player': 6},
+    # Round start: 56 dealt cards, 14 each.
+    'TestImage9.png': {'left': 14, 'middle': 14, 'right': 14, 'player': 14},
 }
 
 

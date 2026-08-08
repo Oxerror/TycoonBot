@@ -141,6 +141,23 @@ EXPECTED_HANDS = {
         (Rank.KING, Suit.CLUBS),
         (Rank.JOKER, None),
     ],
+    # Round start, 14 cards: the Wonder and Joker at the fan edges are
+    # clipped beyond recognition (the start-hand validation test below
+    # recovers them from the status bar).
+    'TestImage9.png': [
+        (Rank.FIVE, Suit.DIAMONDS),
+        (Rank.FIVE, Suit.HEARTS),
+        (Rank.SIX, Suit.CLUBS),
+        (Rank.SEVEN, Suit.DIAMONDS),
+        (Rank.EIGHT, Suit.HEARTS),
+        (Rank.JACK, Suit.CLUBS),
+        (Rank.QUEEN, Suit.CLUBS),
+        (Rank.KING, Suit.CLUBS),
+        (Rank.ACE, Suit.CLUBS),
+        (Rank.ACE, Suit.HEARTS),
+        (Rank.TWO, Suit.CLUBS),
+        (Rank.TWO, Suit.DIAMONDS),
+    ],
 }
 
 
@@ -176,6 +193,8 @@ EXPECTED_TRICKS = {
     'TestImage6.png': [(Rank.JOKER, None)],
     'TestImage7.png': [(Rank.EIGHT, Suit.HEARTS), (Rank.EIGHT, Suit.SPADES)],
     'TestImage8.png': [(Rank.EIGHT, Suit.SPADES)],
+    # Round start: nothing on the table yet.
+    'TestImage9.png': [],
 }
 
 
@@ -192,3 +211,24 @@ def test_reads_current_trick_from_screenshot(image_name):
     cards = read_play_field(field_region)
 
     assert [(c.rank, c.suit) for c in cards] == EXPECTED_TRICKS[image_name]
+
+
+@pytest.mark.slow
+def test_start_hand_validation_recovers_clipped_cards():
+    """At round start deck - bar = own hand, so the status bar proves
+    which cards the fan clipped away: TestImage9's hand reading lacks
+    exactly the edge Wonder and Joker."""
+    from GameLogic.GameState import validate_start_hand
+    from StatusBarReader import read_status_bar
+
+    image = cv2.imread(str(IMAGE_DIR / 'TestImage9.png'))
+    assert image is not None
+
+    height = image.shape[0]
+    cards = read_hand(image[height * 3 // 4:height])
+    bar_counts = read_status_bar(image)
+
+    missing, extra = validate_start_hand(cards, bar_counts)
+
+    assert missing == {Rank.WONDER: 1, Rank.JOKER: 1}
+    assert extra == {}

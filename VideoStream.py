@@ -4,7 +4,7 @@ import cv2
 import mss
 
 from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer, read_play_field
-from GameLogic.GameState import GameState
+from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from CardsLeftReader import read_cards_left
@@ -132,6 +132,21 @@ def videoCapturing():
                 if opponents_total != game_state.total_unseen():
                     print(f"Cards-left cross-check: bubbles say {opponents_total}, "
                           f"tracking says {game_state.total_unseen()}")
+
+            # At round start nothing has been played, so deck - bar must
+            # equal the own hand — validates the hand reading and reveals
+            # the clipped cards at the fan edges.
+            all_counts = list(counters.values())
+            if None not in all_counts and sum(all_counts) == DECK_SIZE:
+                missing, extra = validate_start_hand(cards, bar_counts)
+                if extra:
+                    print("WARNING: hand reading shows cards the bar rules out: "
+                          + ", ".join(f"{r.name} x{n}" for r, n in extra.items()))
+                elif missing:
+                    print("Round start: hand validated; unread clipped cards: "
+                          + ", ".join(f"{r.name} x{n}" for r, n in missing.items()))
+                else:
+                    print("Round start: hand reading fully validated against the bar")
 
         cv2.imshow('Field', playField)
         cv2.imshow('Hand', handWithDetections)

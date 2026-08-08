@@ -10,9 +10,8 @@ from GameLogic.PlayTracker import PlayTracker
 
 
 def full_counts(**overrides):
-    counts = {rank: 4 for rank in Rank}
-    counts[Rank.JOKER] = 2
-    counts[Rank.WONDER] = 1
+    from GameLogic.GameState import FULL_DECK
+    counts = dict(FULL_DECK)
     for name, value in overrides.items():
         counts[Rank[name]] = value
     return counts

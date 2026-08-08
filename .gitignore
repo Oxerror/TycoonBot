@@ -10,3 +10,7 @@
 *.pyc
 *.pyo
 __pycache__/
+.pytest_cache/
+
+# Generated detection outputs
+Image/*_detected.*

@@ -14,7 +14,7 @@ The goal of this project is, that
 ## Requirements
 Install dependencies:
 ```sh
-pip install -r dependencies.txt
+pip install -r requirements.txt
 ```
 
 Requires:

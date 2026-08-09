@@ -8,7 +8,7 @@
     "capture": {
         "interval_seconds": 45,
         "unknown_digit_cooldown": 20,
-        "max_frames": 200,
+        "max_frames": 1000,
         "poll_seconds": 0.5
     }
 }

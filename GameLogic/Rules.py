@@ -18,6 +18,15 @@ Rules encoded here (confirmed in-game and via the community guides):
 - Wonder: can always be played regardless of the trick, wins the trick
   immediately, and the player leads the next one.
 
+Round flow (not encoded yet, needed for the future game simulator):
+- The holder of the 3 of Diamonds leads round one; afterwards the
+  Beggar leads. A trick is won when the other three players pass after
+  the last play (any play resets the passing).
+- Card exchange between rounds: the Beggar gives their two best cards
+  to the Tycoon, who returns two freely chosen; the Poor gives their
+  best card to the Rich, who returns one freely chosen. The Wonder is
+  ignored when determining "best".
+
 A move is a tuple of Cards; PASS is the empty tuple.
 """
 

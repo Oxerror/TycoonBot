@@ -74,7 +74,8 @@ class PlayTracker:
             key = self._key(card)
             if self.seen_on_field[key] < self._copies(card.rank):
                 self.seen_on_field[key] += 1
-        self.previous_hand = Counter(self._key(card) for card in hand_cards)
+        if hand_cards is not None:
+            self.previous_hand = Counter(self._key(card) for card in hand_cards)
         if player_cards_left is not None:
             self.previous_player_count = player_cards_left
 
@@ -107,13 +108,42 @@ class PlayTracker:
                 self.known_hand[(rank, suit)] += 1
         self.known_hand = +self.known_hand
 
+    def _reconcile_known_hand(self, current_hand, player_cards_left):
+        """A fresh reading plus the own counter is authoritative.
+
+        Everything read is certainly in the hand. Beyond that, only as
+        many remembered cards fit as the counter leaves unaccounted
+        (the clipped fan-edge cards) — anything else is stale, e.g. a
+        card whose play slipped between frames. Clipped edges are the
+        Wonder and Joker, so specials and placeholders are kept first.
+        """
+        budget = player_cards_left - sum(current_hand.values())
+        extras = self.known_hand - current_hand
+
+        def priority(key):
+            rank, suit = key
+            if rank in (Rank.WONDER, Rank.JOKER):
+                return 0
+            return 1 if suit is None else 2
+
+        kept = Counter()
+        for key in sorted(extras, key=priority):
+            take = min(extras[key], max(0, budget))
+            if take:
+                kept[key] = take
+                budget -= take
+
+        self.known_hand = current_hand + kept
+
     def update(self, field_cards, hand_cards, player_cards_left=None):
         """
         Process one frame's readings.
 
         Args:
             field_cards: Cards of the current trick (read_play_field)
-            hand_cards: Cards in the own hand (read_hand)
+            hand_cards: Cards in the own hand (read_hand), or None when
+                the hand was not read this frame — attribution then
+                relies on the own counter alone.
             player_cards_left: The own "Cards Left" counter, when
                 readable. Used to attribute plays of cards the hand
                 reading never showed (the clipped fan-edge cards).
@@ -127,7 +157,10 @@ class PlayTracker:
                 opponent play is impossible for the tracked state —
                 recognition or bookkeeping has gone wrong.
         """
-        current_hand = Counter(self._key(card) for card in hand_cards)
+        if hand_cards is None:
+            current_hand = self.previous_hand
+        else:
+            current_hand = Counter(self._key(card) for card in hand_cards)
 
         new_cards = []
         for card in field_cards:
@@ -139,8 +172,7 @@ class PlayTracker:
         if not self.started:
             # Baseline frame: whatever lies on the table predates tracking.
             self.started = True
-            if self.known_hand:
-                self._upgrade_placeholders(current_hand)
+            self._absorb_reading(current_hand, hand_cards, player_cards_left)
             self.previous_hand = current_hand
             self.previous_player_count = player_cards_left
             return []
@@ -168,10 +200,17 @@ class PlayTracker:
 
             events.append({'cards': new_cards, 'by_player': by_player})
 
-        if self.known_hand:
-            self._upgrade_placeholders(current_hand)
+        self._absorb_reading(current_hand, hand_cards, player_cards_left)
 
         self.previous_hand = current_hand
         if player_cards_left is not None:
             self.previous_player_count = player_cards_left
         return events
+
+    def _absorb_reading(self, current_hand, hand_cards, player_cards_left):
+        if not self.known_hand or hand_cards is None:
+            return
+        if player_cards_left is not None:
+            self._reconcile_known_hand(current_hand, player_cards_left)
+        else:
+            self._upgrade_placeholders(current_hand)

@@ -135,6 +135,27 @@ class TestKnownHand:
         tracker.update([Card(Rank.JOKER)], self.READING, player_cards_left=2)
         assert all(c.rank != Rank.JOKER for c in tracker.known_hand_cards())
 
+    def test_stale_known_cards_dropped_by_reconciliation(self):
+        """A play that slipped between frames must not leave phantom
+        cards in the known hand: reading + counter is authoritative."""
+        tracker, _ = make_tracker()
+        tracker.set_known_hand([Card(Rank.FOUR, Suit.CLUBS),
+                                Card(Rank.FOUR, Suit.HEARTS),
+                                Card(Rank.KING, Suit.HEARTS),
+                                Card(Rank.JOKER)])
+        tracker.update([], [Card(Rank.KING, Suit.HEARTS)], player_cards_left=2)
+        remaining = [(c.rank, c.suit) for c in tracker.known_hand_cards()]
+        # The 4s are gone (played unseen); the clipped Joker survives
+        # because the counter says one more card than the reading shows.
+        assert remaining == [(Rank.KING, Suit.HEARTS), (Rank.JOKER, None)]
+
+    def test_reconciliation_trusts_complete_reading(self):
+        tracker, _ = make_tracker()
+        tracker.set_known_hand([Card(Rank.KING, Suit.HEARTS), Card(Rank.JOKER)])
+        tracker.update([], [Card(Rank.KING, Suit.HEARTS)], player_cards_left=1)
+        remaining = [(c.rank, c.suit) for c in tracker.known_hand_cards()]
+        assert remaining == [(Rank.KING, Suit.HEARTS)]
+
     def test_reading_upgrades_suitless_placeholder(self):
         tracker, _ = make_tracker()
         tracker.set_known_hand([Card(Rank.FIVE, None), Card(Rank.KING, Suit.HEARTS)])

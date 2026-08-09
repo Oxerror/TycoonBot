@@ -91,7 +91,7 @@ def _leads_out(cards, unseen, revolution, memo):
     return result
 
 
-def _guaranteed_win(hand, moves, unseen, revolution):
+def guaranteed_win(hand, moves, unseen, revolution=False):
     """A legal move that starts an unstoppable lead-out of the whole
     hand, or None. Cheapest first so the pick looks natural when
     several lines win."""
@@ -131,7 +131,7 @@ def recommend(hand, trick=(), revolution=False, unseen=None):
         return min(finishers, key=lambda m: _cost(m, revolution))
 
     if unseen is not None:
-        winner = _guaranteed_win(hand, moves, unseen, revolution)
+        winner = guaranteed_win(hand, moves, unseen, revolution)
         if winner is not None:
             return winner
 

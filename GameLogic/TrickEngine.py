@@ -33,19 +33,27 @@ from GameLogic.Rules import (PASS, causes_revolution, contains_wonder,
 
 
 class TrickEngine:
-    def __init__(self, hands, leader, revolution=False):
+    def __init__(self, hands, leader, revolution=False, trick=(),
+                 last_player=None, passed=()):
         """
         Args:
             hands: one iterable of Cards per player, in seating order
-            leader: index of the player who leads the first trick
-            revolution: True when a revolution carries into the round
+            leader: index of the player to act first
+            revolution: True when a revolution is already active
+            trick: a set already on the table, for resuming mid-trick
+                (e.g. a search rollout from the live game's position)
+            last_player: who laid down that set
+            passed: players already locked out of the current trick
         """
         self.hands = [list(hand) for hand in hands]
         self.player_count = len(self.hands)
-        self.trick = ()
-        self.last_player = None
-        self.passed = set()
-        self.finished = []
+        self.trick = tuple(trick)
+        self.last_player = last_player
+        self.passed = set(passed)
+        # A resumed round may start with players who already went out;
+        # they occupy the top places (their order among themselves is
+        # unknowable here and irrelevant to the players still in).
+        self.finished = [p for p, hand in enumerate(self.hands) if not hand]
         self.revolution = revolution
         self.current = leader
 

@@ -7,16 +7,27 @@ verify against the status bar, detect whose turn it is and suggest a
 move on ours.
 """
 
+import random
+
 from GameLogic.Card import Card
 from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from GameLogic.Recommender import recommend
+from GameLogic.SearchRecommender import SearchPolicy
+from GameLogic.Simulator import Observation
 from CardsLeftReader import read_cards_left_detailed
 from ImageRecognition import (HAND_MATCH_PARAMS, banner_visible, get_recognizer,
                               read_play_field, read_revolution_indicator)
 from ScreenCapture import cropRegion
 from StatusBarReader import read_status_bar
+
+
+# Seating for the search rollouts, our seat first. Derived from the
+# round-start turn sequences in the recorded session (clean first
+# go-arounds read left->player->right and right->middle->left->player):
+# play proceeds player -> right -> middle -> left.
+TURN_ORDER = ('right', 'middle', 'left')
 
 
 class TycoonSession:
@@ -27,6 +38,32 @@ class TycoonSession:
         self.tracker = None
         self.diverged_frames = 0
         self.previous_bar = None
+        # Seeded so a Replay of the same session suggests the same moves.
+        self.search = SearchPolicy(samples=16, rng=random.Random(0))
+
+    def _suggest(self, own_hand, trick, counters):
+        """Pick a move with the rollout search when the table state is
+        trustworthy, falling back to the plain heuristic otherwise.
+
+        Two approximations, pending a Pass-bubble reader: nobody is
+        assumed to have passed this trick, and the current set is
+        attributed to the opponent acting right before us.
+        """
+        opponent_counts = [counters.get(name) for name in TURN_ORDER]
+        unseen = self.game_state.unseen
+        if (None not in opponent_counts
+                and sum(opponent_counts) == self.game_state.total_unseen()):
+            obs = Observation(seat=0,
+                              hand=tuple(own_hand),
+                              trick=tuple(trick),
+                              revolution=self.tracker.revolution,
+                              unseen=dict(unseen),
+                              counts=(len(own_hand), *opponent_counts),
+                              passed=frozenset(),
+                              last_player=len(TURN_ORDER) if trick else None)
+            return self.search(obs)
+        return recommend(own_hand, trick, self.tracker.revolution,
+                         unseen=unseen)
 
     def _start_tracking(self, bar_counts, trick, cards, player_count):
         """Begin tracking fresh (first frame or a new round)."""
@@ -172,8 +209,7 @@ class TycoonSession:
                 own_hand = (self.tracker.known_hand_cards()
                             if self.tracker.known_hand else cards)
                 if own_hand:
-                    move = recommend(own_hand, trick, self.tracker.revolution,
-                                     unseen=self.game_state.unseen)
+                    move = self._suggest(own_hand, trick, counters)
                     messages.append(f"YOUR TURN - suggested play: "
                                     f"{list(move) if move else 'PASS'}")
             elif active_player is not None:

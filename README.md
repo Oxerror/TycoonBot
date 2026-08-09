@@ -83,18 +83,32 @@ game always displays the hand sorted (Wonder, 3..Ace, 2, Joker), which
 deck - bar = own hand, so `validate_start_hand()` proves the hand
 reading correct and recovers the cards clipped at the fan edges.
 
-Step 3 has begun: `GameLogic/Rules.py` encodes the Tycoon rules (equal
+Step 3 is running: `GameLogic/Rules.py` encodes the Tycoon rules (equal
 rank sets with jokers as wildcards, revolution, 8-stop, the 3-Spade
 Reversal against a single Joker, and the Wonder winning any trick) and
-`GameLogic/Recommender.py` is a first heuristic recommender — finish
-when possible, lead weak, win cheap, save power cards. The active
-player's bubble carries a red marker, which `CardsLeftReader` reads as
-turn detection, so the loop suggests a move exactly when it is your
-turn. Revolution state comes from the persistent "Flip Strength" badge
-the game shows above the player box, read every frame. A stronger
-(search/learning based) recommender is next; the game's event banners
-(All Pass, 8 Stop, Done, Game Set, per-player Pass bubbles) are the
-obvious channel for explicit pass/trick-flow tracking when needed.
+`GameLogic/Recommender.py` is the heuristic baseline — finish when
+possible, lead weak, win cheap, save power cards — made unseen-aware:
+`Rules.is_unbeatable()` proves from the tracked counts when no opponent
+can top a set, and the recommender plays out mathematically won rounds
+(a chain of unbeatable sets) on the spot. The active player's bubble
+carries a red marker, which `CardsLeftReader` reads as turn detection,
+so the loop suggests a move exactly when it is your turn. Revolution
+state comes from the persistent "Flip Strength" badge the game shows
+above the player box, read every frame.
+
+On top of that, `GameLogic/TrickEngine.py` runs whole rounds (turn
+order, pass lock-outs, trick resolution, finish order),
+`GameLogic/Simulator.py` deals seeded hands and pits pluggable
+policies against each other, and `GameLogic/SearchRecommender.py`
+picks the live suggestion by determinized rollout search: sample
+deals of the unseen cards consistent with the opponents' Cards Left
+counters, play every candidate move to the end of the round, keep the
+one with the best average finish. In the arena (`python -m
+GameLogic.Arena`) the heuristic wins 82% of rounds against three
+random players, and the search wins 38% against three heuristics (25%
+would be a fair share). Next: reading the per-player Pass bubbles to
+feed real pass state into the search, and growing the simulator into
+self-play training for a learned policy.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

@@ -13,7 +13,7 @@ from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from GameLogic.Recommender import recommend
 from CardsLeftReader import read_cards_left_detailed
-from ImageRecognition import (HAND_MATCH_PARAMS, get_recognizer,
+from ImageRecognition import (HAND_MATCH_PARAMS, banner_visible, get_recognizer,
                               read_play_field, read_revolution_indicator)
 from ScreenCapture import cropRegion
 from StatusBarReader import read_status_bar
@@ -71,9 +71,15 @@ class TycoonSession:
         all_counts = list(counters.values())
         round_start = None not in all_counts and sum(all_counts) == DECK_SIZE
 
-        trick = read_play_field(play_field)
-        if trick:
-            messages.append(f"Current trick: {trick}")
+        if banner_visible(play_field):
+            # Event banners (All Pass, 8 Stop, Done, ...) cover the
+            # field and fool the card templates; skip this reading.
+            trick = []
+            messages.append("Event banner on the field - trick reading skipped")
+        else:
+            trick = read_play_field(play_field)
+            if trick:
+                messages.append(f"Current trick: {trick}")
 
         detections = []
         cards = None

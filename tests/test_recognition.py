@@ -204,6 +204,8 @@ EXPECTED_TRICKS = {
     # Round start: nothing on the table yet.
     'TestImage9.png': [],
     'TestImage10.png': [(Rank.FOUR, Suit.HEARTS), (Rank.FOUR, Suit.SPADES)],
+    # A real Wonder played onto the table.
+    'TestImage11.png': [(Rank.WONDER, None)],
 }
 
 
@@ -220,6 +222,26 @@ def test_reads_current_trick_from_screenshot(image_name):
     cards = read_play_field(field_region)
 
     assert [(c.rank, c.suit) for c in cards] == EXPECTED_TRICKS[image_name]
+
+
+def test_event_banner_detection():
+    """Event banners cover the field with white shapes that fool the
+    card templates (the Done star reads as a Wonder), so banner frames
+    must be recognized and their field reading skipped."""
+    from ImageRecognition import banner_visible
+
+    banner = cv2.imread(str(IMAGE_DIR / 'TestImage12.png'))
+    height, width = banner.shape[:2]
+    field = banner[int(height * 0.4):int(height * 0.8),
+                   int(width * 0.333):int(width * 0.667)]
+    assert banner_visible(field) is True
+
+    for name in ['TestImage.png', 'TestImage10.png', 'TestImage11.png']:
+        image = cv2.imread(str(IMAGE_DIR / name))
+        height, width = image.shape[:2]
+        field = image[int(height * 0.4):int(height * 0.8),
+                      int(width * 0.333):int(width * 0.667)]
+        assert banner_visible(field) is False, name
 
 
 def test_revolution_indicator():

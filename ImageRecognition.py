@@ -574,6 +574,22 @@ def read_revolution_indicator(frame):
     return float(score) >= REVOLUTION_THRESHOLD
 
 
+# Event banners (All Pass, 8 Stop, Done, Game Set) cover the play field
+# with large white shapes that fool the card templates — the Done star
+# reads as a Wonder, the 8 Stop banner contains a giant 8. Measured
+# white coverage: normal fields stay below 0.03, banners exceed 0.12.
+BANNER_WHITE_FRACTION = 0.07
+
+
+def banner_visible(field_image):
+    """True when an event banner covers the play-field crop."""
+    channels = field_image.astype(np.int16)
+    white = ((channels[:, :, 0] > 230) & (channels[:, :, 1] > 230)
+             & (channels[:, :, 2] > 230))
+    fraction = float(white.sum()) / (field_image.shape[0] * field_image.shape[1])
+    return fraction > BANNER_WHITE_FRACTION
+
+
 def read_play_field(image):
     """
     Recognize the cards of the current trick on the table.

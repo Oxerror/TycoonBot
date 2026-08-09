@@ -48,6 +48,8 @@ class TrickEngine:
         self.hands = [list(hand) for hand in hands]
         self.player_count = len(self.hands)
         self.trick = tuple(trick)
+        if self.trick and last_player is None:
+            raise ValueError("A resumed trick needs its owner (last_player)")
         self.last_player = last_player
         self.passed = set(passed)
         # A resumed round may start with players who already went out;

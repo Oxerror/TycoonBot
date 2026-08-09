@@ -12,6 +12,12 @@ template makes the affected counter read as None instead of guessing.
 The bubble also announces whose turn it is: the active player's bubble
 turns bright red while the others stay black. The area around the
 digits is sampled (ignoring the white text) to read that marker.
+
+A player who passed keeps their bubble text in yellow until the trick
+ends (seen throughout the recorded sessions, e.g. two opponents yellow
+at once mid-trick), so the same digit segmentation run on a yellow
+mask reads both the count and the pass state of players the white
+mask cannot see.
 """
 
 import cv2
@@ -30,8 +36,10 @@ PLAYER_REGIONS = {
 }
 
 # Count digits are noticeably taller than the "Cards Left" lettering.
-# Measured at 1080p and scaled with the frame height.
+# Measured at 1080p and scaled with the frame height. The yellow pass
+# text is drawn larger than the white version (digits 46-50px).
 DIGIT_HEIGHT = (36, 42)
+YELLOW_DIGIT_HEIGHT = (44, 54)
 DIGIT_MAX_WIDTH = 45
 REFERENCE_FRAME_HEIGHT = 1080
 
@@ -63,9 +71,17 @@ class CardsLeftReader:
         return ((r > 190) & (g > 190) & (b > 190)).astype(np.uint8) * 255
 
     @staticmethod
-    def _find_digit_blobs(mask, frame_height):
+    def _yellow_mask(crop):
+        """The pass marker: bubble text turns yellow (measured ~BGR
+        96,228,232) until the trick ends."""
+        b, g, r = cv2.split(crop.astype(np.int16))
+        return ((r > 180) & (g > 150) & (b < 140)
+                & (g - b > 60)).astype(np.uint8) * 255
+
+    @staticmethod
+    def _find_digit_blobs(mask, frame_height, height_range=DIGIT_HEIGHT):
         scale = frame_height / REFERENCE_FRAME_HEIGHT
-        min_h, max_h = DIGIT_HEIGHT[0] * scale, DIGIT_HEIGHT[1] * scale
+        min_h, max_h = height_range[0] * scale, height_range[1] * scale
         max_w = DIGIT_MAX_WIDTH * scale
 
         count, _, stats, _ = cv2.connectedComponentsWithStats(mask, 8)
@@ -127,29 +143,44 @@ class CardsLeftReader:
         Read every player's card counter from a full game frame.
 
         Returns:
-            Tuple (counts, unknown, active): counts maps {'left',
-            'middle', 'right', 'player'} to int or None when that
-            counter is not readable; unknown lists the players whose
-            counter showed a digit-sized blob matching no known digit
-            template; active names the player whose bubble carries the
-            red your-turn marker, or None when no bubble does.
+            Tuple (counts, unknown, active, passed): counts maps
+            {'left', 'middle', 'right', 'player'} to int or None when
+            that counter is not readable; unknown lists the players
+            whose counter showed a digit-sized blob matching no known
+            digit template; active names the player whose bubble
+            carries the red your-turn marker, or None when no bubble
+            does; passed lists the players whose bubble text is yellow
+            — the pass marker shown until the trick ends.
         """
         height, width = frame.shape[:2]
         counts = {}
         unknown = []
         active = None
+        passed = []
 
         for player, (fx1, fx2, fy1, fy2) in PLAYER_REGIONS.items():
             crop = frame[int(height * fy1):int(height * fy2),
                          int(width * fx1):int(width * fx2)]
             mask = self._white_mask(crop)
             blobs = self._find_digit_blobs(mask, height)
+            has_passed = False
+
+            if not blobs or len(blobs) > 2:
+                yellow = self._yellow_mask(crop)
+                yellow_blobs = self._find_digit_blobs(yellow, height,
+                                                      YELLOW_DIGIT_HEIGHT)
+                if yellow_blobs and len(yellow_blobs) <= 2:
+                    mask, blobs = yellow, yellow_blobs
+                    has_passed = True
+                    passed.append(player)
 
             if not blobs or len(blobs) > 2:
                 counts[player] = None
                 continue
 
-            if self._bubble_redness(crop, mask, blobs) > ACTIVE_BUBBLE_REDNESS:
+            if (not has_passed
+                    and self._bubble_redness(crop, mask, blobs)
+                    > ACTIVE_BUBBLE_REDNESS):
                 active = player
 
             digits = [self._classify_digit(mask[y:y + h, x:x + w])
@@ -160,7 +191,7 @@ class CardsLeftReader:
             else:
                 counts[player] = int(''.join(str(d) for d in digits))
 
-        return counts, unknown, active
+        return counts, unknown, active, passed
 
     def read(self, frame):
         """Like read_detailed, but returns only the counts dict."""

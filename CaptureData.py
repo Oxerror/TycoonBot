@@ -115,7 +115,7 @@ def captureLoop():
 
             now = time.monotonic()
             bar_counts = read_status_bar(frame)
-            cards_left, unknown_digits, active_player = read_cards_left_detailed(frame)
+            cards_left, unknown_digits, active_player, _ = read_cards_left_detailed(frame)
 
             reason = None
             if bar_counts is not None and bar_counts != last_saved_bar:

@@ -61,14 +61,37 @@ def test_reads_all_counters(image_name):
 def test_reads_active_player(image_name):
     image = cv2.imread(str(IMAGE_DIR / image_name))
     assert image is not None, f'missing test image {image_name}'
-    _, _, active = read_cards_left_detailed(image)
+    _, _, active, _ = read_cards_left_detailed(image)
     assert active == EXPECTED_ACTIVE[image_name]
+
+
+# No fixture shows a pass marker: the yellow reading is exercised by
+# TestImage13 below; these frames were all taken outside a pass.
+@pytest.mark.parametrize('image_name', sorted(EXPECTED))
+def test_no_pass_marker_on_regular_fixtures(image_name):
+    image = cv2.imread(str(IMAGE_DIR / image_name))
+    assert image is not None, f'missing test image {image_name}'
+    _, _, _, passed = read_cards_left_detailed(image)
+    assert passed == []
+
+
+def test_reads_pass_markers_and_their_counts():
+    """TestImage13: the middle opponent has passed — yellow, enlarged
+    bubble text the white-mask reader could not even count. The own
+    counter reads 0: the player already finished this round."""
+    image = cv2.imread(str(IMAGE_DIR / 'TestImage13.png'))
+    assert image is not None, 'missing test image TestImage13.png'
+    counts, unknown, active, passed = read_cards_left_detailed(image)
+    assert passed == ['middle']
+    assert counts == {'left': 2, 'middle': 1, 'right': 2, 'player': 0}
+    assert active == 'left'
 
 
 def test_no_active_player_on_blank_frame():
     frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
-    _, _, active = read_cards_left_detailed(frame)
+    _, _, active, passed = read_cards_left_detailed(frame)
     assert active is None
+    assert passed == []
 
 
 def test_non_game_frame_reads_none():

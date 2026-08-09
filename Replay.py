@@ -9,6 +9,11 @@ having to play:
     python Replay.py [glob]
 
 Every ALARM/WARNING line is a finding worth investigating.
+
+Recognition results are cached in a *.readings.json sidecar next to
+each frame (frames never change once captured), so only the first
+replay pays for template matching — later ones take seconds. Delete
+the sidecars to force fresh recognition.
 """
 
 import glob
@@ -17,12 +22,14 @@ from pathlib import Path
 
 import cv2
 
+from FrameReader import CachedFrameReader
 from ScreenCapture import loadConfig
 from Session import TycoonSession
 
 
 def replay(pattern):
-    session = TycoonSession(loadConfig())
+    reader = CachedFrameReader()
+    session = TycoonSession(loadConfig(), reader=reader)
 
     files = sorted(glob.glob(pattern))
     if not files:
@@ -34,6 +41,7 @@ def replay(pattern):
         frame = cv2.imread(path)
         if frame is None:
             continue
+        reader.begin_frame(path)
         messages, _, _ = session.process_frame(frame)
         print(f"=== {Path(path).name}")
         for message in messages:

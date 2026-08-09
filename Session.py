@@ -11,16 +11,13 @@ import random
 
 from GameLogic.Card import Card
 from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
-from GameLogic.HandReader import detections_to_cards, hand_is_ordered
+from GameLogic.HandReader import hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from GameLogic.Recommender import recommend
 from GameLogic.SearchRecommender import SearchPolicy
 from GameLogic.Simulator import Observation
-from CardsLeftReader import read_cards_left_detailed
-from ImageRecognition import (HAND_MATCH_PARAMS, banner_visible, get_recognizer,
-                              read_play_field, read_revolution_indicator)
+from FrameReader import FrameReader
 from ScreenCapture import cropRegion
-from StatusBarReader import read_status_bar
 
 
 # Seating for the search rollouts, our seat first. Derived from the
@@ -31,9 +28,9 @@ TURN_ORDER = ('right', 'middle', 'left')
 
 
 class TycoonSession:
-    def __init__(self, config):
+    def __init__(self, config, reader=None):
         self.config = config
-        self.recognizer = get_recognizer()
+        self.reader = reader if reader is not None else FrameReader()
         self.game_state = None
         self.tracker = None
         self.diverged_frames = 0
@@ -41,26 +38,36 @@ class TycoonSession:
         # Seeded so a Replay of the same session suggests the same moves.
         self.search = SearchPolicy(samples=16, rng=random.Random(0))
 
-    def _suggest(self, own_hand, trick, counters):
+    def _suggest(self, own_hand, trick, counters, passed_players):
         """Pick a move with the rollout search when the table state is
         trustworthy, falling back to the plain heuristic otherwise.
 
-        Two approximations, pending a Pass-bubble reader: nobody is
-        assumed to have passed this trick, and the current set is
-        attributed to the opponent acting right before us.
+        The yellow bubble markers say who already passed this trick;
+        the current set is attributed to the nearest predecessor who
+        has not passed (whoever laid it down cannot carry the marker).
         """
         opponent_counts = [counters.get(name) for name in TURN_ORDER]
         unseen = self.game_state.unseen
         if (None not in opponent_counts
                 and sum(opponent_counts) == self.game_state.total_unseen()):
+            passed_seats = frozenset(TURN_ORDER.index(name) + 1
+                                     for name in passed_players
+                                     if name in TURN_ORDER)
+            last_player = None
+            if trick:
+                last_player = len(TURN_ORDER)
+                for seat in range(len(TURN_ORDER), 0, -1):
+                    if seat not in passed_seats:
+                        last_player = seat
+                        break
             obs = Observation(seat=0,
                               hand=tuple(own_hand),
                               trick=tuple(trick),
                               revolution=self.tracker.revolution,
                               unseen=dict(unseen),
                               counts=(len(own_hand), *opponent_counts),
-                              passed=frozenset(),
-                              last_player=len(TURN_ORDER) if trick else None)
+                              passed=passed_seats,
+                              last_player=last_player)
             return self.search(obs)
         return recommend(own_hand, trick, self.tracker.revolution,
                          unseen=unseen)
@@ -103,27 +110,27 @@ class TycoonSession:
         play_field = cropRegion(frame, self.config['play_field'])
         current_hand = cropRegion(frame, self.config['hand_region'])
 
-        bar_counts = read_status_bar(frame)
-        counters, _, active_player = read_cards_left_detailed(frame)
+        bar_counts = self.reader.bar(frame)
+        counters, _, active_player, passed_players = self.reader.counters(frame)
         all_counts = list(counters.values())
         round_start = None not in all_counts and sum(all_counts) == DECK_SIZE
 
-        if banner_visible(play_field):
+        opponent_passes = [p for p in passed_players if p != 'player']
+        if opponent_passes:
+            messages.append(f"Passed this trick: {', '.join(opponent_passes)}")
+
+        banner, trick = self.reader.field(play_field)
+        if banner:
             # Event banners (All Pass, 8 Stop, Done, ...) cover the
             # field and fool the card templates; skip this reading.
-            trick = []
             messages.append("Event banner on the field - trick reading skipped")
-        else:
-            trick = read_play_field(play_field)
-            if trick:
-                messages.append(f"Current trick: {trick}")
+        elif trick:
+            messages.append(f"Current trick: {trick}")
 
         detections = []
         cards = None
         if self._needs_hand_reading(counters, active_player, round_start):
-            detections = self.recognizer.template_match(current_hand, **HAND_MATCH_PARAMS)
-            self.recognizer.refine_suit_detections(current_hand, detections)
-            cards = detections_to_cards(detections)
+            detections, cards = self.reader.hand(current_hand)
             messages.append(f"Hand: {cards}")
             if not hand_is_ordered(cards):
                 # The game always displays the hand sorted, so an unordered
@@ -202,14 +209,15 @@ class TycoonSession:
         if self.tracker is not None:
             # The persistent badge is authoritative: it survives quad
             # plays whose cards were never readable on the field.
-            self.tracker.revolution = read_revolution_indicator(frame)
+            self.tracker.revolution = self.reader.revolution(frame)
             if self.tracker.revolution:
                 messages.append("REVOLUTION is active - strength order is flipped")
             if active_player == 'player':
                 own_hand = (self.tracker.known_hand_cards()
                             if self.tracker.known_hand else cards)
                 if own_hand:
-                    move = self._suggest(own_hand, trick, counters)
+                    move = self._suggest(own_hand, trick, counters,
+                                         passed_players)
                     messages.append(f"YOUR TURN - suggested play: "
                                     f"{list(move) if move else 'PASS'}")
             elif active_player is not None:

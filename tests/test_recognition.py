@@ -141,6 +141,14 @@ EXPECTED_HANDS = {
         (Rank.KING, Suit.CLUBS),
         (Rank.JOKER, None),
     ],
+    # Revolution active (see the indicator test); small hand with both
+    # specials and the 3 of Spades fully readable.
+    'TestImage10.png': [
+        (Rank.WONDER, None),
+        (Rank.THREE, Suit.SPADES),
+        (Rank.EIGHT, Suit.SPADES),
+        (Rank.JOKER, None),
+    ],
     # Round start, 14 cards: the Wonder and Joker at the fan edges are
     # clipped beyond recognition (the start-hand validation test below
     # recovers them from the status bar).
@@ -195,6 +203,7 @@ EXPECTED_TRICKS = {
     'TestImage8.png': [(Rank.EIGHT, Suit.SPADES)],
     # Round start: nothing on the table yet.
     'TestImage9.png': [],
+    'TestImage10.png': [(Rank.FOUR, Suit.HEARTS), (Rank.FOUR, Suit.SPADES)],
 }
 
 
@@ -211,6 +220,18 @@ def test_reads_current_trick_from_screenshot(image_name):
     cards = read_play_field(field_region)
 
     assert [(c.rank, c.suit) for c in cards] == EXPECTED_TRICKS[image_name]
+
+
+def test_revolution_indicator():
+    """The persistent Flip Strength badge marks an active revolution."""
+    from ImageRecognition import read_revolution_indicator
+
+    active = cv2.imread(str(IMAGE_DIR / 'TestImage10.png'))
+    assert read_revolution_indicator(active) is True
+
+    for name in ['TestImage.png', 'TestImage7.png', 'TestImage9.png']:
+        image = cv2.imread(str(IMAGE_DIR / name))
+        assert read_revolution_indicator(image) is False, name
 
 
 @pytest.mark.slow

@@ -74,6 +74,21 @@ class CardsLeftReader:
             x, y, w, h, _ = stats[i]
             if min_h <= h <= max_h and 10 * scale <= w <= max_w:
                 blobs.append((x, y, w, h))
+
+        if len(blobs) > 2:
+            # An active (enlarged) bubble can push a title letter into
+            # the digit size range. The count digits share a baseline
+            # and sit rightmost, so keep only that cluster.
+            clusters = []
+            for blob in sorted(blobs, key=lambda b: b[1]):
+                for cluster in clusters:
+                    if abs(cluster[0][1] - blob[1]) <= 12 * scale:
+                        cluster.append(blob)
+                        break
+                else:
+                    clusters.append([blob])
+            blobs = max(clusters, key=lambda c: max(b[0] for b in c))
+
         blobs.sort()
         return blobs
 

@@ -90,7 +90,11 @@ Reversal against a single Joker, and the Wonder winning any trick) and
 when possible, lead weak, win cheap, save power cards. The active
 player's bubble carries a red marker, which `CardsLeftReader` reads as
 turn detection, so the loop suggests a move exactly when it is your
-turn. A stronger (search/learning based) recommender is next.
+turn. Revolution state comes from the persistent "Flip Strength" badge
+the game shows above the player box, read every frame. A stronger
+(search/learning based) recommender is next; the game's event banners
+(All Pass, 8 Stop, Done, Game Set, per-player Pass bubbles) are the
+obvious channel for explicit pass/trick-flow tracking when needed.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

@@ -20,6 +20,9 @@ EXPECTED = {
     'TestImage8.png': {'left': 8, 'middle': 6, 'right': 10, 'player': 6},
     # Round start: 56 dealt cards, 14 each.
     'TestImage9.png': {'left': 14, 'middle': 14, 'right': 14, 'player': 14},
+    # The left bubble is active (enlarged): its title letter must not
+    # spoil the digit segmentation.
+    'TestImage10.png': {'left': 10, 'middle': 10, 'right': 10, 'player': 4},
 }
 
 
@@ -43,6 +46,7 @@ EXPECTED_ACTIVE = {
     'TestImage7.png': 'left',
     'TestImage8.png': 'middle',
     'TestImage9.png': 'middle',
+    'TestImage10.png': 'left',
 }
 
 

@@ -13,7 +13,8 @@ from GameLogic.HandReader import detections_to_cards, hand_is_ordered
 from GameLogic.PlayTracker import PlayTracker
 from GameLogic.Recommender import recommend
 from CardsLeftReader import read_cards_left_detailed
-from ImageRecognition import HAND_MATCH_PARAMS, get_recognizer, read_play_field
+from ImageRecognition import (HAND_MATCH_PARAMS, get_recognizer,
+                              read_play_field, read_revolution_indicator)
 from ScreenCapture import cropRegion
 from StatusBarReader import read_status_bar
 
@@ -156,6 +157,9 @@ class TycoonSession:
                     + (f" ({len(recovered)} recovered from the bar)" if recovered else ""))
 
         if self.tracker is not None:
+            # The persistent badge is authoritative: it survives quad
+            # plays whose cards were never readable on the field.
+            self.tracker.revolution = read_revolution_indicator(frame)
             if self.tracker.revolution:
                 messages.append("REVOLUTION is active - strength order is flipped")
             if active_player == 'player':

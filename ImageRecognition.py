@@ -533,6 +533,47 @@ def read_hand(image):
     return detections_to_cards(detections)
 
 
+# The persistent "Revolution - Flip Strength" badge shown above the
+# player box while a revolution is active. Detected via its red arrow,
+# matched as a binary red-mask shape (red also appears in character
+# panels, so shape matters, not just color).
+REVOLUTION_TEMPLATE_PATH = PROJECT_ROOT / 'Image' / 'templates' / 'indicators' / 'revolution.png'
+REVOLUTION_REGION = {'top': 0.44, 'bottom': 0.64, 'left': 0.03, 'right': 0.26}
+REVOLUTION_THRESHOLD = 0.6
+
+_revolution_template = None
+
+
+def read_revolution_indicator(frame):
+    """True while the Revolution badge is visible on a full game frame."""
+    global _revolution_template
+    if _revolution_template is None:
+        _revolution_template = cv2.imread(str(REVOLUTION_TEMPLATE_PATH),
+                                          cv2.IMREAD_GRAYSCALE)
+        if _revolution_template is None:
+            raise FileNotFoundError(f"Missing {REVOLUTION_TEMPLATE_PATH}")
+
+    height, width = frame.shape[:2]
+    region = frame[int(height * REVOLUTION_REGION['top']):int(height * REVOLUTION_REGION['bottom']),
+                   int(width * REVOLUTION_REGION['left']):int(width * REVOLUTION_REGION['right'])]
+
+    channels = region.astype(np.int16)
+    red_mask = ((channels[:, :, 2] - np.maximum(channels[:, :, 0], channels[:, :, 1]) > 60)
+                & (channels[:, :, 2] > 120)).astype(np.uint8) * 255
+
+    scale = height / 1080
+    template = _revolution_template
+    if scale != 1.0:
+        template = cv2.resize(template, (max(1, int(template.shape[1] * scale)),
+                                         max(1, int(template.shape[0] * scale))))
+    if (template.shape[0] > red_mask.shape[0]
+            or template.shape[1] > red_mask.shape[1]):
+        return False
+
+    score = cv2.matchTemplate(red_mask, template, cv2.TM_CCOEFF_NORMED).max()
+    return float(score) >= REVOLUTION_THRESHOLD
+
+
 def read_play_field(image):
     """
     Recognize the cards of the current trick on the table.

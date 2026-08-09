@@ -51,6 +51,16 @@ saves annotated copies:
 python ImageRecognition.py test --threshold=0.8
 ```
 
+**Replay a recorded session** — validates the whole pipeline against
+the frames in `Image/captures/`:
+```sh
+python Replay.py
+```
+Recognition results are cached in `*.readings.json` sidecars next to
+the frames, so only the first replay pays for template matching —
+after that a full session replays in seconds. Delete the sidecars to
+force fresh recognition.
+
 **Tests**:
 ```sh
 pytest              # everything
@@ -103,12 +113,21 @@ policies against each other, and `GameLogic/SearchRecommender.py`
 picks the live suggestion by determinized rollout search: sample
 deals of the unseen cards consistent with the opponents' Cards Left
 counters, play every candidate move to the end of the round, keep the
-one with the best average finish. In the arena (`python -m
-GameLogic.Arena`) the heuristic wins 82% of rounds against three
-random players, and the search wins 38% against three heuristics (25%
-would be a fair share). Next: reading the per-player Pass bubbles to
-feed real pass state into the search, and growing the simulator into
-self-play training for a learned policy.
+one with the best average finish. A player who passed keeps yellow
+bubble text until the trick ends; `CardsLeftReader` reads it, so the
+search knows who is locked out and who owns the current set.
+
+The first learned player exists too: `python -m GameLogic.SelfPlay`
+has four search policies play seeded rounds against each other,
+records every sampled decision (situation, candidate move, average
+finish over the rollouts), and distills them into a small evaluator
+net (`GameLogic/PolicyNet.py`, saved as `policy_net.pt`). In the
+arena (`python -m GameLogic.Arena`): the heuristic wins 82% against
+three random players; the search wins 38% against three heuristics;
+the learned net — one forward pass, no rollouts — wins 44% against
+three heuristics, though the search still outranks it at a shared
+table (37% vs 22%). Next rung of the ladder: put the net back into
+the search as its rollout policy and iterate.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

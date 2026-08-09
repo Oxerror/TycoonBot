@@ -17,3 +17,6 @@ Image/*_detected.*
 
 # Raw gameplay captures (promote good frames to Image/ by hand)
 Image/captures/
+
+# Self-play datasets (regenerate with python -m GameLogic.SelfPlay)
+GameLogic/selfplay_*.npz

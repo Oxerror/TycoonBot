@@ -38,12 +38,22 @@ class SearchPolicy:
         max_candidates: cap on evaluated moves, cheapest-first; the
             heuristic cost order keeps the plausible moves in front.
         rng: seeded random.Random for reproducible play.
+        rollout_policy: (hand, trick, revolution) -> move steering
+            every seat inside the rollouts; default is the fast
+            heuristic recommender.
+        recorder: optional callable(obs, candidates, average_places)
+            invoked after each sampled decision — the self-play
+            training data tap.
     """
 
-    def __init__(self, samples=16, max_candidates=12, rng=None):
+    def __init__(self, samples=16, max_candidates=12, rng=None,
+                 rollout_policy=None, recorder=None):
         self.samples = samples
         self.max_candidates = max_candidates
         self.rng = rng if rng is not None else random.Random()
+        self.rollout_policy = (rollout_policy if rollout_policy is not None
+                               else recommend)
+        self.recorder = recorder
 
     def __call__(self, obs):
         hand = list(obs.hand)
@@ -71,6 +81,10 @@ class SearchPolicy:
             worlds = self._deal_unseen(obs)
             for i, move in enumerate(candidates):
                 totals[i] += self._rollout(obs, move, worlds)
+
+        if self.recorder is not None and self.samples:
+            self.recorder(obs, candidates,
+                          [total / self.samples for total in totals])
 
         best = min(range(len(candidates)), key=lambda i: totals[i])
         return candidates[best]
@@ -110,6 +124,6 @@ class SearchPolicy:
         engine.step(move if move else PASS)
         while not engine.round_over():
             player = engine.current
-            engine.step(recommend(engine.hands[player], engine.trick,
-                                  engine.revolution))
+            engine.step(self.rollout_policy(engine.hands[player],
+                                            engine.trick, engine.revolution))
         return engine.ranking().index(obs.seat)

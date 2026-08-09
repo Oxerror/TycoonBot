@@ -92,6 +92,47 @@ def wins_trick_immediately(move, trick=()):
     return is_spade_three_counter(move, trick)
 
 
+def is_unbeatable(move, unseen, revolution=False):
+    """
+    True when no unseen cards can top this move.
+
+    Args:
+        move: the set to judge (tuple of Cards)
+        unseen: dict {Rank: count} of cards still hidden in the
+            opponents' hands (GameState.unseen)
+        revolution: True while a revolution is active
+
+    The counts pool all opponents, so this is conservative in the
+    right direction: if the pooled counts cannot form a beating set,
+    no single opponent can either. The suit-blind counts force one
+    more conservative call: any unseen 3 might be the 3 of Spades, so
+    a lone Joker is never unbeatable while a 3 is out.
+    """
+    if wins_trick_immediately(move):
+        return True
+    if unseen[Rank.WONDER] > 0:
+        return False
+
+    size = len(move)
+    strength = move_strength(move, revolution)
+    jokers = unseen[Rank.JOKER]
+
+    if size == 1 and set_rank(move) == Rank.JOKER and unseen[Rank.THREE] > 0:
+        return False
+    if jokers >= size and JOKER_STRENGTH > strength:
+        return False
+    for rank in Rank:
+        if rank in (Rank.JOKER, Rank.WONDER):
+            continue
+        if effective_strength(rank, revolution) <= strength:
+            continue
+        # A beating set needs at least one real card of the rank;
+        # jokers fill the remaining slots.
+        if unseen[rank] >= 1 and unseen[rank] + jokers >= size:
+            return False
+    return True
+
+
 def _candidate_sets(hand):
     """Every distinct set the hand can form, one representative per
     strength-equivalent combination (single 3s keep their suit apart —

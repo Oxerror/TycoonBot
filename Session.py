@@ -172,7 +172,8 @@ class TycoonSession:
                 own_hand = (self.tracker.known_hand_cards()
                             if self.tracker.known_hand else cards)
                 if own_hand:
-                    move = recommend(own_hand, trick, self.tracker.revolution)
+                    move = recommend(own_hand, trick, self.tracker.revolution,
+                                     unseen=self.game_state.unseen)
                     messages.append(f"YOUR TURN - suggested play: "
                                     f"{list(move) if move else 'PASS'}")
             elif active_player is not None:

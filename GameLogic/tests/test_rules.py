@@ -6,12 +6,21 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from GameLogic.Card import Card, Rank, Suit
 from GameLogic.Rules import (causes_revolution, effective_strength,
-                             is_spade_three_counter, legal_moves,
-                             move_strength, set_rank, wins_trick_immediately)
+                             is_spade_three_counter, is_unbeatable,
+                             legal_moves, move_strength, set_rank,
+                             wins_trick_immediately)
 
 
 def c(rank, suit=None):
     return Card(rank, suit)
+
+
+def unseen(**counts):
+    """Unseen-count dict: every rank 0 except the given overrides."""
+    result = {rank: 0 for rank in Rank}
+    for name, count in counts.items():
+        result[Rank[name]] = count
+    return result
 
 
 class TestStrength:
@@ -159,6 +168,53 @@ class TestRevolutionTrigger:
     def test_smaller_sets_do_not(self):
         assert not causes_revolution((c(Rank.NINE, Suit.CLUBS),
                                       c(Rank.NINE, Suit.HEARTS)))
+
+
+class TestUnbeatable:
+    def test_ace_unbeatable_once_twos_and_jokers_are_gone(self):
+        move = (c(Rank.ACE, Suit.HEARTS),)
+        assert is_unbeatable(move, unseen(KING=3, QUEEN=4))
+        assert not is_unbeatable(move, unseen(TWO=1))
+        assert not is_unbeatable(move, unseen(JOKER=1))
+
+    def test_unseen_wonder_beats_everything(self):
+        move = (c(Rank.TWO, Suit.HEARTS),)
+        assert not is_unbeatable(move, unseen(WONDER=1))
+
+    def test_pair_needs_a_full_unseen_pair_to_beat(self):
+        move = (c(Rank.KING, Suit.HEARTS), c(Rank.KING, Suit.SPADES))
+        assert is_unbeatable(move, unseen(ACE=1, TWO=1))
+        assert not is_unbeatable(move, unseen(ACE=2))
+
+    def test_unseen_joker_completes_a_beating_pair(self):
+        move = (c(Rank.KING, Suit.HEARTS), c(Rank.KING, Suit.SPADES))
+        assert not is_unbeatable(move, unseen(ACE=1, JOKER=1))
+
+    def test_jokers_alone_form_the_strongest_set(self):
+        move = (c(Rank.TWO, Suit.HEARTS), c(Rank.TWO, Suit.SPADES))
+        assert not is_unbeatable(move, unseen(JOKER=2))
+        # A single unseen joker cannot pair up against a pair of 2s.
+        assert is_unbeatable(move, unseen(JOKER=1))
+
+    def test_lone_joker_fears_the_spade_three(self):
+        move = (c(Rank.JOKER),)
+        assert not is_unbeatable(move, unseen(THREE=1))
+        assert is_unbeatable(move, unseen(FOUR=4, TWO=4))
+
+    def test_joker_pair_does_not_fear_threes(self):
+        move = (c(Rank.JOKER), c(Rank.JOKER))
+        assert is_unbeatable(move, unseen(THREE=4, TWO=4))
+        assert not is_unbeatable(move, unseen(WONDER=1))
+
+    def test_immediate_winners_are_always_unbeatable(self):
+        assert is_unbeatable((c(Rank.EIGHT, Suit.CLUBS),), unseen(WONDER=2, JOKER=2))
+        assert is_unbeatable((c(Rank.WONDER),), unseen(WONDER=1, JOKER=2))
+
+    def test_revolution_flips_the_judgement(self):
+        move = (c(Rank.FOUR, Suit.HEARTS),)
+        threat = unseen(THREE=2)
+        assert is_unbeatable(move, threat)
+        assert not is_unbeatable(move, threat, revolution=True)
 
 
 class TestSuitlessPlaceholders:

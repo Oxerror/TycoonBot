@@ -61,6 +61,20 @@ the frames, so only the first replay pays for template matching —
 after that a full session replays in seconds. Delete the sidecars to
 force fresh recognition.
 
+**Virtual gamepad smoke test** — proves the input path with the game
+NOT running:
+```sh
+python VirtualGamepad.py          # emulate an Xbox 360 pad
+python VirtualGamepad.py --ds4    # emulate a DualShock 4 (PS Remote Play)
+```
+Requires `pip install vgamepad` (its setup offers the ViGEmBus driver).
+The script presses every mapped button once per second; watch the
+emulated pad respond in Windows' controller panel (Win+R → `joy.cpl` →
+select the controller → Properties) or at
+https://hardwaretester.com/gamepad. The pad is **not** connected to the
+game loop: `InputExecutor` defaults to suggest-only, and nothing
+constructs an act-mode executor yet.
+
 **Tests**:
 ```sh
 pytest              # everything
@@ -145,6 +159,24 @@ net beats its predecessor head-to-head, 29% vs 21% Tycoon over 400
 shared-table rounds, while keeping the heuristic matchup. Training on
 the ladder data alone lost that matchup (19%): nets calibrate to the
 play style behind their targets, so the pool keeps both styles.
+
+Step 4 (playing alone) has its offline half: `InputPlanner.py`
+translates a suggested move into the button presses that would play it
+— D-pad steps across the recognized fan (bar-recovered edge cards get
+slotted in by the game's display sort), select each card, confirm, or
+hit pass — with every unverified UI belief (cursor start/wrap, button
+roles, confirm flow) isolated in its `UI_ASSUMPTIONS` block for the
+first live session to correct in one place. `Session` runs the planner
+on every own turn and hands the sequence to an `InputExecutor`, which
+in its default suggest-only mode just logs it; Replay therefore
+exercises the whole loop — read → track → search → plan inputs — on
+the recorded captures, and the planned sequences are fixtured beside
+them like the recognition readings
+(`tests/test_input_plan_replay.py`). The act half exists as
+`VirtualGamepad.py` (Xbox 360 via vgamepad/ViGEm, DualShock 4 for PS
+Remote Play), smoke-testable without the game, but is deliberately not
+wired to act mode — that, plus timing calibration, is a supervised
+live-session task.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

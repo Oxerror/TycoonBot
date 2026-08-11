@@ -4,7 +4,8 @@ Shared by the live capture loop (VideoStream) and the offline replay
 tool (Replay), so both follow the game with exactly the same brain:
 recognize the hand and current trick, track plays into GameState,
 verify against the status bar, detect whose turn it is and suggest a
-move on ours.
+move on ours — including the button presses that would play it, which
+the executor only logs unless it was explicitly built in act mode.
 """
 
 import random
@@ -17,6 +18,8 @@ from GameLogic.Recommender import recommend
 from GameLogic.SearchRecommender import SearchPolicy
 from GameLogic.Simulator import Observation
 from FrameReader import FrameReader
+from InputExecutor import InputExecutor
+from InputPlanner import merge_into_fan, plan_move
 from ScreenCapture import cropRegion
 
 
@@ -28,9 +31,10 @@ TURN_ORDER = ('right', 'middle', 'left')
 
 
 class TycoonSession:
-    def __init__(self, config, reader=None):
+    def __init__(self, config, reader=None, executor=None):
         self.config = config
         self.reader = reader if reader is not None else FrameReader()
+        self.executor = executor if executor is not None else InputExecutor()
         self.game_state = None
         self.tracker = None
         self.diverged_frames = 0
@@ -220,6 +224,17 @@ class TycoonSession:
                                          passed_players)
                     messages.append(f"YOUR TURN - suggested play: "
                                     f"{list(move) if move else 'PASS'}")
+                    # cards was read this frame (own turns always are);
+                    # the tracked hand fills in the clipped fan edges.
+                    try:
+                        fan = merge_into_fan(cards or [], own_hand)
+                        plan = plan_move(fan, move)
+                    except ValueError as error:
+                        messages.append(f"WARNING: no input plan - {error}")
+                    else:
+                        sent = self.executor.execute(plan)
+                        messages.append(('Input sent: ' if sent
+                                         else 'Planned input: ') + ' '.join(plan))
             elif active_player is not None:
                 messages.append(f"Waiting: {active_player} opponent is playing")
 

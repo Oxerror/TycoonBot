@@ -132,10 +132,19 @@ finish over the rollouts), and distills them into a small evaluator
 net (`GameLogic/PolicyNet.py`, saved as `policy_net.pt`). In the
 arena (`python -m GameLogic.Arena`): the heuristic wins 82% against
 three random players; the search wins 38% against three heuristics;
-the learned net — one forward pass, no rollouts — wins 44% against
-three heuristics, though the search still outranks it at a shared
-table (37% vs 22%). Next rung of the ladder: put the net back into
-the search as its rollout policy and iterate.
+the learned net — one forward pass, no rollouts — wins 37% against
+three heuristics.
+
+The ladder's first rung is climbed (`--ladder`): the trained net goes
+back into the search as its rollout policy — fed each rollout seat's
+full view of the determinized world, which matters: steering blind
+distilled into a clearly weaker net — and the strengthened search
+(average place 1.36 vs 1.55 for its heuristic-rollout peers)
+regenerates the training data. Retrained on all data pooled, the new
+net beats its predecessor head-to-head, 29% vs 21% Tycoon over 400
+shared-table rounds, while keeping the heuristic matchup. Training on
+the ladder data alone lost that matchup (19%): nets calibrate to the
+play style behind their targets, so the pool keeps both styles.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar), and

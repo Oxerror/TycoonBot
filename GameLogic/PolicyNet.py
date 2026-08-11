@@ -80,7 +80,18 @@ def load(path):
 
 
 class LearnedPolicy:
-    """A Simulator policy: argmin predicted place over the candidates."""
+    """A Simulator policy: argmin predicted place over the candidates.
+
+    `wants_observation` marks it for SearchPolicy: passed as the
+    rollout_policy, it receives the acting seat's full Observation of
+    each determinized rollout world (rollout_observation) instead of
+    a bare (hand, trick, revolution) — steering the rollouts with the
+    same in-distribution inputs it was trained on. A context-blind
+    variant (zeroed unseen/counts) was tried first and made the
+    distilled next generation clearly weaker.
+    """
+
+    wants_observation = True
 
     def __init__(self, model):
         self.model = model
@@ -102,26 +113,3 @@ class LearnedPolicy:
                              dtype=torch.float32)
             predicted = self.model(x)
         return candidates[int(predicted.argmin())]
-
-    def as_rollout(self, hand, trick, revolution):
-        """(hand, trick, revolution) -> move, for SearchPolicy rollouts.
-        Rollout states carry no unseen/count context, so those features
-        read as zero — the net was trained with them populated, which
-        costs some fidelity but keeps one model for both uses."""
-        obs = _RolloutView(hand, trick, revolution)
-        return self(obs)
-
-
-class _RolloutView:
-    """Minimal Observation stand-in for rollout states."""
-
-    def __init__(self, hand, trick, revolution):
-        from GameLogic.Card import Rank
-        self.seat = 0
-        self.hand = tuple(hand)
-        self.trick = tuple(trick)
-        self.revolution = revolution
-        self.unseen = {rank: 0 for rank in Rank}
-        self.counts = (len(self.hand), 0, 0, 0)
-        self.passed = frozenset()
-        self.last_player = None

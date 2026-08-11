@@ -81,6 +81,36 @@ class TestDataset:
         assert all(len(vector) == FEATURE_COUNT for vector in features)
         assert all(0.0 <= place <= 3.0 for place in places)
 
+    def test_rollout_policy_steers_the_generating_search(self):
+        from GameLogic.Recommender import recommend
+        calls = []
+
+        def counting_rollout(hand, trick, revolution):
+            calls.append(1)
+            return recommend(hand, trick, revolution)
+
+        features, _ = generate_dataset(rounds=1, samples=2, seed=5,
+                                       rollout_policy=counting_rollout)
+        assert features
+        assert calls, "the custom rollout policy never ran"
+
+
+@pytest.mark.slow
+class TestLadder:
+    def test_learned_rollout_is_an_observation_policy(self):
+        """The committed model, loaded through the ladder hook, wants
+        full observations and answers them with legal moves."""
+        from GameLogic.Rules import legal_moves
+        from GameLogic.SelfPlay import learned_rollout
+        rollout = learned_rollout()
+        assert getattr(rollout, 'wants_observation', False)
+        obs = observe([c(Rank.FIVE, Suit.CLUBS), c(Rank.NINE, Suit.HEARTS),
+                       c(Rank.KING, Suit.SPADES), c(Rank.KING, Suit.HEARTS)],
+                      trick=[c(Rank.FOUR, Suit.HEARTS)])
+        move = rollout(obs)
+        assert move == PASS or move in legal_moves(obs.hand, obs.trick,
+                                                   obs.revolution)
+
 
 @pytest.mark.slow
 class TestTraining:

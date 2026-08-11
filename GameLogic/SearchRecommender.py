@@ -23,9 +23,34 @@ import random
 from GameLogic.Card import Card, Rank, Suit
 from GameLogic.Recommender import _cost, guaranteed_win, recommend
 from GameLogic.Rules import PASS, legal_moves
+from GameLogic.Simulator import Observation
 from GameLogic.TrickEngine import TrickEngine
 
 SUITS = tuple(Suit)
+
+
+def rollout_observation(engine, seat):
+    """The acting seat's full view of a determinized rollout world.
+
+    Inside a rollout every hidden card sits in some engine hand, so
+    the seat's unseen counts are simply the other hands pooled — an
+    Observation exactly like the live one, letting observation
+    policies (the learned net, the recommender) steer rollouts with
+    the same in-distribution inputs they were built for.
+    """
+    unseen = {rank: 0 for rank in Rank}
+    for other, hand in enumerate(engine.hands):
+        if other != seat:
+            for card in hand:
+                unseen[card.rank] += 1
+    return Observation(seat=seat,
+                       hand=tuple(engine.hands[seat]),
+                       trick=engine.trick,
+                       revolution=engine.revolution,
+                       unseen=unseen,
+                       counts=tuple(len(hand) for hand in engine.hands),
+                       passed=frozenset(engine.passed),
+                       last_player=engine.last_player)
 
 
 class SearchPolicy:
@@ -38,9 +63,13 @@ class SearchPolicy:
         max_candidates: cap on evaluated moves, cheapest-first; the
             heuristic cost order keeps the plausible moves in front.
         rng: seeded random.Random for reproducible play.
-        rollout_policy: (hand, trick, revolution) -> move steering
-            every seat inside the rollouts; default is the fast
-            heuristic recommender.
+        rollout_policy: steers every seat inside the rollouts; default
+            is the fast heuristic recommender. Either a plain
+            (hand, trick, revolution) -> move callable, or — when it
+            carries a truthy `wants_observation` attribute — an
+            Observation -> move policy fed the acting seat's full view
+            of the determinized world via rollout_observation (this is
+            how the learned net steers rollouts without going blind).
         recorder: optional callable(obs, candidates, average_places)
             invoked after each sampled decision — the self-play
             training data tap.
@@ -53,6 +82,8 @@ class SearchPolicy:
         self.rng = rng if rng is not None else random.Random()
         self.rollout_policy = (rollout_policy if rollout_policy is not None
                                else recommend)
+        self._rollout_wants_obs = getattr(self.rollout_policy,
+                                          'wants_observation', False)
         self.recorder = recorder
 
     def __call__(self, obs):
@@ -124,6 +155,11 @@ class SearchPolicy:
         engine.step(move if move else PASS)
         while not engine.round_over():
             player = engine.current
-            engine.step(self.rollout_policy(engine.hands[player],
-                                            engine.trick, engine.revolution))
+            if self._rollout_wants_obs:
+                engine.step(self.rollout_policy(
+                    rollout_observation(engine, player)))
+            else:
+                engine.step(self.rollout_policy(engine.hands[player],
+                                                engine.trick,
+                                                engine.revolution))
         return engine.ranking().index(obs.seat)

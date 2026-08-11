@@ -56,6 +56,35 @@ class TestShortcuts:
         assert policy(obs) == PASS
 
 
+class TestObservationRollouts:
+    def test_observation_rollout_sees_the_determinized_world(self):
+        """A rollout policy marked wants_observation receives full
+        Observations whose unseen counts match the other seats' hands
+        exactly — the determinized world leaves nothing blank."""
+        seen = []
+
+        def rollout(obs):
+            seen.append(obs)
+            return recommender_policy(obs)
+        rollout.wants_observation = True
+
+        policy = SearchPolicy(samples=2, rng=random.Random(3),
+                              rollout_policy=rollout)
+        obs = observe([c(Rank.FIVE, Suit.CLUBS), c(Rank.NINE, Suit.HEARTS),
+                       c(Rank.KING, Suit.SPADES)],
+                      trick=[c(Rank.FOUR, Suit.HEARTS)],
+                      counts_others=(2, 2, 2), KING=2, ACE=2, SIX=2)
+        move = policy(obs)
+        assert move == PASS or len(move) == 1
+
+        assert seen, "the observation rollout never steered"
+        for view in seen:
+            hidden = sum(view.counts) - view.counts[view.seat]
+            assert sum(view.unseen.values()) == hidden
+            assert len(view.counts) == 4
+        assert sum(seen[0].unseen.values()) > 0
+
+
 class TestSearchedRounds:
     def test_search_policy_survives_full_rounds(self):
         rng = random.Random(11)

@@ -18,7 +18,7 @@ Rules encoded here (confirmed in-game and via the community guides):
 - Wonder: can always be played regardless of the trick, wins the trick
   immediately, and the player leads the next one.
 
-Round flow (not encoded yet, needed for the future game simulator):
+Round flow (encoded in TrickEngine and Simulator.play_game):
 - The holder of the 3 of Diamonds leads round one; afterwards the
   Beggar leads. A trick is won when the other three players pass after
   the last play (any play resets the passing).

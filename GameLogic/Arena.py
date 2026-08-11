@@ -13,7 +13,7 @@ Run directly for a quick scoreboard:
 import random
 from collections import Counter
 
-from GameLogic.Simulator import deal, first_leader, play_round
+from GameLogic.Simulator import deal, first_leader, play_game, play_round
 
 PLACE_NAMES = ('Tycoon', 'Rich', 'Poor', 'Beggar')
 
@@ -43,6 +43,38 @@ def compare(factories, rounds=100, seed=0, on_round=None):
             places[player][place] += 1
         if on_round is not None:
             on_round(index, ranking)
+    return places
+
+
+def compare_games(factories, games=25, rounds=8, seed=0, on_game=None):
+    """
+    Play seeded multi-round games (with the card exchange) instead of
+    independent rounds: winning a round now buys better cards in the
+    next, so sustained strength compounds the way it does in the real
+    game.
+
+    Args:
+        factories: one rng -> policy callable per seat; each policy
+            plays a whole game, and one with an `exchange` method also
+            picks its own tribute returns
+        games: number of games, each `rounds` rounds long
+        on_game: optional callable(game_index, rankings)
+
+    Returns:
+        The same per-seat place Counters as `compare`, aggregated over
+        every round of every game.
+    """
+    rng = random.Random(seed)
+    places = [Counter() for _ in factories]
+    for index in range(games):
+        policies = [factory(random.Random(rng.random()))
+                    for factory in factories]
+        rankings = play_game(policies, rounds, rng)
+        for ranking in rankings:
+            for place, player in enumerate(ranking):
+                places[player][place] += 1
+        if on_game is not None:
+            on_game(index, rankings)
     return places
 
 

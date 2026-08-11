@@ -117,6 +117,14 @@ one with the best average finish. A player who passed keeps yellow
 bubble text until the trick ends; `CardsLeftReader` reads it, so the
 search knows who is locked out and who owns the current set.
 
+The simulator also chains rounds into whole games
+(`Simulator.play_game`): after round one the Beggar leads, and each
+later round opens with the card exchange — the Beggar's two best
+cards to the Tycoon, the Poor's best to the Rich, freely chosen cards
+back (weakest by default; a policy can override the choice).
+`Arena.compare_games` measures policies across such games, where
+winning a round buys better cards in the next.
+
 The first learned player exists too: `python -m GameLogic.SelfPlay`
 has four search policies play seeded rounds against each other,
 records every sampled decision (situation, candidate move, average

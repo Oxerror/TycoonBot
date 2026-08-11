@@ -1,4 +1,4 @@
-"""Play whole rounds of Tycoon offline.
+"""Play whole rounds — and whole games — of Tycoon offline.
 
 Glues the TrickEngine to pluggable player policies so recommender
 ideas can be measured against each other long before the bot ever
@@ -11,6 +11,13 @@ unseen counts (everything not in the own hand and not yet played —
 exactly what GameState tracks for the live player, so `recommend`
 drops in unchanged), everyone's hand sizes, and the trick bookkeeping
 (who laid down the current set, who has passed).
+
+`play_game` chains rounds into a full game: after round one the
+Beggar leads, and the round starts with the card exchange — the
+Beggar's two best cards go to the Tycoon, the Poor's best to the
+Rich, and the receivers hand back freely chosen cards (weakest by
+default; a policy object may override the choice with an
+`exchange(hand, count)` method returning cards from that hand).
 """
 
 from collections import Counter, namedtuple
@@ -18,7 +25,7 @@ from collections import Counter, namedtuple
 from GameLogic.Card import Card, Rank, Suit
 from GameLogic.GameState import FULL_DECK
 from GameLogic.Recommender import recommend
-from GameLogic.Rules import PASS, legal_moves
+from GameLogic.Rules import PASS, effective_strength, legal_moves
 from GameLogic.TrickEngine import TrickEngine
 
 PLAYER_COUNT = 4
@@ -117,3 +124,105 @@ def play_round(hands, leader, policies, on_event=None):
                 on_event(event)
 
     return engine.ranking()
+
+
+def best_cards(hand, count):
+    """The `count` strongest cards — what a tribute must consist of.
+    The Wonder is ignored when determining "best" (it stays home)."""
+    givable = [card for card in hand if card.rank != Rank.WONDER]
+    givable.sort(key=lambda card: effective_strength(card.rank),
+                 reverse=True)
+    return givable[:count]
+
+
+def weakest_cards(hand, count):
+    """Default return choice for the Tycoon and the Rich: shed the
+    weakest cards (never the Wonder or a Joker — they rank highest)."""
+    return sorted(hand, key=lambda card: effective_strength(card.rank))[:count]
+
+
+def _take(hand, cards):
+    """Remove exactly these card objects (identity first — Card.__eq__
+    is rank-only, so equality would grab a same-rank stand-in)."""
+    for card in cards:
+        for i, held in enumerate(hand):
+            if held is card:
+                del hand[i]
+                break
+        else:
+            for i, held in enumerate(hand):
+                if held.rank == card.rank and held.suit == card.suit:
+                    del hand[i]
+                    break
+            else:
+                raise ValueError(f"{card} is not in the hand")
+
+
+def exchange_cards(hands, ranking, policies=None, on_event=None):
+    """
+    The between-round tribute, mutating `hands` in place.
+
+    The Beggar's two best cards go to the Tycoon, the Poor's best to
+    the Rich; each receiver returns as many freely chosen cards.
+
+    Args:
+        hands: the freshly dealt hands, indexed by seat
+        ranking: last round's finish order (Tycoon first)
+        policies: optional; a receiver whose policy object has an
+            `exchange(hand, count)` method picks its own return cards
+            (from `hand`, which already contains the tribute) instead
+            of the weakest-cards default
+        on_event: optional callable receiving one event per tribute:
+            ('exchange', giver, receiver, tribute, returned)
+    """
+    tycoon, rich, poor, beggar = ranking
+    for giver, receiver, count in ((beggar, tycoon, 2), (poor, rich, 1)):
+        tribute = best_cards(hands[giver], count)
+        _take(hands[giver], tribute)
+        hands[receiver].extend(tribute)
+
+        chooser = (getattr(policies[receiver], 'exchange', None)
+                   if policies is not None else None)
+        returned = (chooser(hands[receiver], count) if chooser is not None
+                    else weakest_cards(hands[receiver], count))
+        returned = list(returned)
+        if len(returned) != count:
+            raise ValueError(f"The exchange must return {count} cards, "
+                             f"got {len(returned)}")
+        _take(hands[receiver], returned)
+        hands[giver].extend(returned)
+
+        if on_event is not None:
+            on_event(('exchange', giver, receiver, tuple(tribute),
+                      tuple(returned)))
+
+
+def play_game(policies, rounds, rng, on_event=None):
+    """
+    Run a multi-round game: deal, exchange, play, repeat.
+
+    The 3 of Diamonds picks round one's leader; every later round
+    starts with the card exchange and the Beggar leading.
+
+    Args:
+        policies: one policy per seat, used for every round
+        rounds: how many rounds to play
+        rng: random.Random dealing every round
+        on_event: optional callable receiving, per round, a
+            ('round_start', round_index, leader) event, the exchange
+            events, and every engine event
+
+    Returns:
+        One ranking per round, each Tycoon-first.
+    """
+    rankings = []
+    for index in range(rounds):
+        hands = deal(rng)
+        leader = (first_leader(hands) if not rankings
+                  else rankings[-1][-1])
+        if on_event is not None:
+            on_event(('round_start', index, leader))
+        if rankings:
+            exchange_cards(hands, rankings[-1], policies, on_event)
+        rankings.append(play_round(hands, leader, policies, on_event))
+    return rankings

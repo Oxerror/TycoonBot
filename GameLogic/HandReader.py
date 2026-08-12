@@ -62,18 +62,49 @@ def hand_is_ordered(cards):
     return all(a <= b for a, b in zip(keys, keys[1:]))
 
 
-def detections_to_cards(detections):
+# A rank kept without its suit must be certain: card artwork produces
+# occasional rank false positives just above the match threshold, and
+# those are normally filtered by failing to pair with a suit. Real
+# rank glyphs score well above this.
+UNPAIRED_RANK_CONFIDENCE = 0.8
+
+
+def _is_mirror_corner(rank_cx, rank_cy, rank_h, suits):
+    """A suit symbol directly above a rank glyph marks the card's
+    upside-down bottom corner: cards mirror their rank into the
+    opposite corner, where the 180-degree flip turns a 9 into a
+    readable 6 (and an 8 into an 8) while the corner's suit lands
+    above the glyph instead of below. Pip cards — the only ones whose
+    flipped ranks match a template — always show pips there too, so
+    the suit evidence is reliable. Such a glyph re-sights a card whose
+    upright corner is read (or covered), never a card of its own."""
+    for suit_det in suits:
+        suit_cx, suit_cy = _center(suit_det)
+        if (suit_cy < rank_cy
+                and rank_cy - suit_cy <= rank_h * 1.5
+                and abs(suit_cx - rank_cx) <= rank_h * 0.45):
+            return True
+    return False
+
+
+def detections_to_cards(detections, keep_unpaired_ranks=False):
     """
     Pair rank and suit detections into Card objects.
 
     Args:
         detections: List of dicts from CardRecognizer.template_match,
             each with 'name', 'confidence' and 'location' (x, y, w, h).
+        keep_unpaired_ranks: Keep a confident rank glyph whose suit
+            symbol is not visible as a suitless Card instead of
+            skipping it. Used for the play field, where a neighbor
+            card covering the suit must not shrink the trick size;
+            hand readings keep the strict pairing as a noise filter.
 
     Returns:
         List of Cards sorted left to right by screen position. Rank
-        glyphs that cannot be paired with a suit are skipped, except
-        Joker and Wonder which have no suit.
+        glyphs that cannot be paired with a suit are skipped (see
+        keep_unpaired_ranks), except Joker and Wonder which have no
+        suit.
     """
     ranks = [d for d in detections if d['name'] in RANK_BY_NAME]
     suits = [d for d in detections if d['name'] in SUIT_BY_NAME]
@@ -110,6 +141,11 @@ def detections_to_cards(detections):
             candidates.append((dist, suit_det))
 
         if not candidates:
+            if (keep_unpaired_ranks
+                    and rank_det['confidence'] >= UNPAIRED_RANK_CONFIDENCE
+                    and not _is_mirror_corner(rank_cx, rank_cy, rank_h,
+                                              suits)):
+                cards.append(Card(rank))
             continue
 
         # Card artwork produces occasional low-confidence suit matches that

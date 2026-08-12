@@ -66,6 +66,53 @@ class TestPairing:
         detections = [det('King', 100, 10, w=90, h=95)]
         assert detections_to_cards(detections) == []
 
+
+class TestUnpairedRanks:
+    """The play field keeps confident ranks whose suit symbol a
+    neighbor card covers: dropping them would understate how many
+    cards the current trick requires."""
+
+    def test_covered_suit_still_counts_on_the_field(self):
+        detections = [
+            det('4', 100, 10, w=90, h=95),
+            det('Cross', 120, 130),
+            det('4', 200, 10, w=90, h=95),   # suit covered by a neighbor
+        ]
+        cards = detections_to_cards(detections, keep_unpaired_ranks=True)
+        assert as_tuples(cards) == [(Rank.FOUR, Suit.CLUBS), (Rank.FOUR, None)]
+
+    def test_low_confidence_unpaired_rank_stays_out(self):
+        """Artwork false positives just above the match threshold are
+        normally filtered by failing to pair — the suitless path must
+        not let them back in."""
+        detections = [det('9', 100, 10, w=90, h=95, confidence=0.76)]
+        assert detections_to_cards(detections, keep_unpaired_ranks=True) == []
+
+    def test_mirrored_bottom_corner_is_not_a_card(self):
+        """Cards mirror their rank into the bottom corner upside down,
+        where a 9 reads as a 6 with the corner's suit ABOVE the glyph
+        (and pips above it too). One 9 of spades must not read as a 9
+        plus a phantom suitless 6."""
+        detections = [
+            det('9', 100, 10, w=70, h=80),       # upright corner
+            det('Spade', 115, 100),              # its suit, below
+            det('Spade', 190, 170),              # a pip
+            det('6', 180, 240, w=70, h=80),      # mirrored corner glyph
+        ]
+        cards = detections_to_cards(detections, keep_unpaired_ranks=True)
+        assert as_tuples(cards) == [(Rank.NINE, Suit.SPADES)]
+
+    def test_covered_suit_without_mirror_evidence_still_counts(self):
+        """A genuinely covered card has no suit anywhere above its
+        rank glyph — the mirror veto must not eat it."""
+        detections = [det('9', 100, 100, w=70, h=80, confidence=0.9)]
+        cards = detections_to_cards(detections, keep_unpaired_ranks=True)
+        assert as_tuples(cards) == [(Rank.NINE, None)]
+
+    def test_hand_reading_keeps_the_strict_pairing(self):
+        detections = [det('King', 100, 10, w=90, h=95)]
+        assert detections_to_cards(detections) == []
+
     def test_neighbor_suit_is_not_stolen(self):
         """A card whose own suit scored just below the confidence cutoff
         must not grab the neighbor card's confident suit — that sets off

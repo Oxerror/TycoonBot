@@ -77,9 +77,9 @@ Requires `pip install vgamepad` (its setup offers the ViGEmBus driver).
 The script presses every mapped button once per second; watch the
 emulated pad respond in Windows' controller panel (Win+R → `joy.cpl` →
 select the controller → Properties) or at
-https://hardwaretester.com/gamepad. The pad is **not** connected to the
-game loop: `InputExecutor` defaults to suggest-only, and nothing
-constructs an act-mode executor yet.
+https://hardwaretester.com/gamepad. The pad only joins the game loop
+when `VideoStream.py` is started with `--act`; without the flag
+`InputExecutor` stays suggest-only.
 
 **Tests**:
 ```sh
@@ -95,6 +95,14 @@ play field, where the game conveniently dims earlier plays so only the
 current trick stays readable. `GameLogic/HandReader.py` pairs the
 glyphs into `Card` objects. Matching scales are cached per template
 after the first confident hit, so warm frames take ~1-2s instead of ~7s.
+
+The hand read survives the game's own-turn UI: cards that cannot join
+a valid play are dimmed to a uniform grey, so a second matching pass
+inside that dim band (`read_hand_detections`) recovers them, and the
+hand crop reaches above the resting fan so cards lifted by selection
+stay in view. On the field, a confident rank glyph whose suit symbol a
+neighbor card covers still counts (suitless), keeping the trick size —
+how many cards a play must contain — honest.
 
 Step 2 (tracking the game) is running: `GameLogic/GameState.py` tracks
 the unseen cards per rank (the opponents' hands),
@@ -120,9 +128,11 @@ Reversal against a single Joker, and the Wonder winning any trick) and
 possible, lead weak, win cheap, save power cards — made unseen-aware:
 `Rules.is_unbeatable()` proves from the tracked counts when no opponent
 can top a set, and the recommender plays out mathematically won rounds
-(a chain of unbeatable sets) on the spot. The active player's bubble
-carries a red marker, which `CardsLeftReader` reads as turn detection,
-so the loop suggests a move exactly when it is your turn. Revolution
+(a chain of unbeatable sets) on the spot. Turn detection reads the
+Pass/Hint button row the game draws while waiting for the player (the
+red bubble marker, its fallback for the row's fade-in, washes out on
+two-digit counts), so the loop suggests a move exactly when it is your
+turn. Revolution
 state comes from the persistent "Flip Strength" badge the game shows
 above the player box, read every frame.
 
@@ -178,16 +188,20 @@ in its default suggest-only mode just logs it; Replay therefore
 exercises the whole loop — read → track → search → plan inputs — on
 the recorded captures, and the planned sequences are fixtured beside
 them like the recognition readings
-(`tests/test_input_plan_replay.py`). The act half exists as
+(`tests/test_input_plan_replay.py`). The act half is
 `VirtualGamepad.py` (Xbox 360 via vgamepad/ViGEm, DualShock 4 for PS
-Remote Play), smoke-testable without the game, but is deliberately not
-wired to act mode — that, plus timing calibration, is a supervised
-live-session task.
+Remote Play), smoke-testable without the game and reachable only via
+`VideoStream.py --act`, which presses each turn's plan at most once;
+verifying the UI assumptions and calibrating press timings against the
+real game remains a supervised live-session task.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
-emblems and are not read (recovered at round start via the bar), and
-identical overlapping cards (a double-joker play) count as one. The
-`CardCNN` model in `ImageRecognition.py` is an untrained skeleton.
+emblems and are not read (recovered at round start via the bar),
+identical overlapping cards (a double-joker play) count as one, and a
+lifted (selected) card whose glyph the neighboring lifted card covers
+stays unread until deselected — the tracker carries it meanwhile, since
+the Cards Left counter proves it never left the hand. The `CardCNN`
+model in `ImageRecognition.py` is an untrained skeleton.
 
 ## License
 

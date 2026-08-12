@@ -6,7 +6,11 @@ consecutive readings tells us when new cards were played and by whom:
 
 - A card is a new play the first time it shows up on the field this
   round (each rank/suit combination exists once per deck, jokers and
-  wonders twice).
+  wonders twice). A field card whose suit symbol is covered arrives
+  suitless; it only counts as new while the field shows more of its
+  rank than the previous frame did, so a reading that pairs the suit
+  in one frame and loses it in the next cannot double-count a card of
+  the static trick.
 - If the new cards just disappeared from our own hand reading — or our
   own "Cards Left" counter dropped by exactly that many — we played
   them; they were never part of the unseen counts, so GameState is
@@ -36,6 +40,9 @@ class PlayTracker:
         self.game_state = game_state
         self.seen_on_field = Counter()
         self.previous_hand = Counter()
+        # Ranks visible on the field last frame, to tell a genuinely
+        # new suit-covered card from a suit-pairing wobble.
+        self.previous_field_ranks = Counter()
         self.previous_player_count = None
         # (rank, suit) -> count; suit is None for cards recovered from
         # the bar whose suit was never readable. Empty until
@@ -51,8 +58,12 @@ class PlayTracker:
         return (card.rank, card.suit)
 
     @staticmethod
-    def _copies(rank):
-        return 2 if rank in (Rank.JOKER, Rank.WONDER) else 1
+    def _copies(rank, suit='suited'):
+        if rank in (Rank.JOKER, Rank.WONDER):
+            return 2
+        # A regular rank read without its (covered) suit shares one
+        # bucket for all four suits, so it can be sighted four times.
+        return 4 if suit is None else 1
 
     def set_known_hand(self, cards):
         """Store the complete own hand (round-start reading plus the
@@ -72,8 +83,9 @@ class PlayTracker:
         self.game_state = game_state
         for card in field_cards:
             key = self._key(card)
-            if self.seen_on_field[key] < self._copies(card.rank):
+            if self.seen_on_field[key] < self._copies(card.rank, card.suit):
                 self.seen_on_field[key] += 1
+        self.previous_field_ranks = Counter(card.rank for card in field_cards)
         if hand_cards is not None:
             self.previous_hand = Counter(self._key(card) for card in hand_cards)
         if player_cards_left is not None:
@@ -163,17 +175,36 @@ class PlayTracker:
             current_hand = Counter(self._key(card) for card in hand_cards)
 
         new_cards = []
+        field_ranks = Counter(card.rank for card in field_cards)
         for card in field_cards:
             key = self._key(card)
-            if self.seen_on_field[key] < self._copies(card.rank):
+            if self.seen_on_field[key] >= self._copies(card.rank, card.suit):
+                continue
+            covered = (card.suit is None
+                       and card.rank not in (Rank.JOKER, Rank.WONDER))
+            rank_grew = (field_ranks[card.rank]
+                         > self.previous_field_ranks[card.rank])
+            if covered and not rank_grew:
+                # A suit-covered card of a rank the field already
+                # showed: the suit pairing wobbled, nothing new landed.
+                continue
+            if (not covered and card.suit is not None and not rank_grew
+                    and self.seen_on_field[(card.rank, None)] > 0):
+                # The suit of an already-counted covered card became
+                # readable: claim its suitless sighting instead of
+                # counting the card a second time.
+                self.seen_on_field[(card.rank, None)] -= 1
                 self.seen_on_field[key] += 1
-                new_cards.append(card)
+                continue
+            self.seen_on_field[key] += 1
+            new_cards.append(card)
 
         if not self.started:
             # Baseline frame: whatever lies on the table predates tracking.
             self.started = True
             self._absorb_reading(current_hand, hand_cards, player_cards_left)
             self.previous_hand = current_hand
+            self.previous_field_ranks = field_ranks
             self.previous_player_count = player_cards_left
             return []
 
@@ -203,6 +234,7 @@ class PlayTracker:
         self._absorb_reading(current_hand, hand_cards, player_cards_left)
 
         self.previous_hand = current_hand
+        self.previous_field_ranks = field_ranks
         if player_cards_left is not None:
             self.previous_player_count = player_cards_left
         return events

@@ -24,8 +24,8 @@ from pathlib import Path
 from GameLogic.Card import Card, Rank, Suit
 from GameLogic.HandReader import detections_to_cards
 from CardsLeftReader import read_cards_left_detailed
-from ImageRecognition import (HAND_MATCH_PARAMS, banner_visible,
-                              get_recognizer, read_play_field,
+from ImageRecognition import (banner_visible, get_recognizer,
+                              read_hand_detections, read_play_field,
                               read_revolution_indicator)
 from StatusBarReader import read_status_bar
 
@@ -56,9 +56,7 @@ class FrameReader:
 
     def hand(self, hand_crop):
         """(raw detections, Cards) of the own hand."""
-        detections = self.recognizer.template_match(hand_crop,
-                                                    **HAND_MATCH_PARAMS)
-        self.recognizer.refine_suit_detections(hand_crop, detections)
+        detections = read_hand_detections(hand_crop)
         return detections, detections_to_cards(detections)
 
     def revolution(self, frame):
@@ -138,16 +136,20 @@ class CachedFrameReader:
             valid=lambda stored: len(stored) == 4)
 
     def field(self, play_field):
-        # 'field_v2': Session now masks the turn-button rows out of the
-        # crop on own turns, so readings cached before that are stale.
+        # 'field_v3': suit-covered ranks now count as suitless cards
+        # (with the mirrored bottom-corner glyphs vetoed), so field
+        # readings cached by earlier conversions are stale.
         return self._get(
-            'field_v2', lambda: self.inner.field(play_field),
+            'field_v3', lambda: self.inner.field(play_field),
             encode=lambda value: [value[0], [_encode_card(c) for c in value[1]]],
             decode=lambda value: (value[0], [_decode_card(c) for c in value[1]]))
 
     def hand(self, hand_crop):
+        # 'hand_v2': the hand read gained a second pass for greyed-out
+        # card glyphs and the hand crop reaches higher (lifted cards),
+        # so readings cached under the old key are stale.
         return self._get(
-            'hand', lambda: self.inner.hand(hand_crop),
+            'hand_v2', lambda: self.inner.hand(hand_crop),
             encode=lambda value: [_encode_card(c) for c in value[1]],
             decode=lambda cards: ([], [_decode_card(c) for c in cards]))
 

@@ -47,6 +47,37 @@ class TestWhiteMask:
         assert (masked[5:, 5:] == 0).all()
 
 
+class TestDimMask:
+    """The dim mask keeps the glyphs of greyed-out cards: on the
+    player's turn the game dims invalid-to-play cards to a uniform
+    ~56%, landing their white glyphs at neutral gray ~142. It is the
+    hand's second matching pass — bright glyphs belong to the white
+    mask pass, which stays untouched."""
+
+    def test_keeps_dim_glyphs_only(self, recognizer):
+        image = np.full((10, 10, 3), 50, dtype=np.uint8)
+        image[2:4, 2:4] = 250          # bright glyph: white pass' job
+        image[6:8, 6:8] = 142          # greyed-out glyph
+        masked = recognizer.apply_dim_mask(image)
+        assert (masked[2:4, 2:4] == 0).all()
+        assert (masked[6:8, 6:8] == 255).all()
+        assert (masked[0:2, 0:2] == 0).all()
+
+    def test_saturated_dim_pixels_stay_out(self, recognizer):
+        """A dimmed red card background is as bright as a dimmed glyph
+        but keeps its saturation — it must not enter the mask."""
+        image = np.zeros((4, 4, 3), dtype=np.uint8)
+        image[:, :] = (40, 40, 150)    # dimmed red, BGR
+        masked = recognizer.apply_dim_mask(image)
+        assert (masked == 0).all()
+
+    def test_white_mask_alone_erases_dim_glyphs(self, recognizer):
+        """Documents why the hand needs the second pass — and why the
+        field must keep the plain white mask (dim = an old trick)."""
+        image = np.full((4, 4, 3), 142, dtype=np.uint8)
+        assert (recognizer.apply_white_mask(image) == 0).all()
+
+
 class TestNonMaxSuppression:
     def test_overlapping_keeps_most_confident(self, recognizer):
         detections = [
@@ -254,6 +285,66 @@ def test_revolution_indicator():
     for name in ['TestImage.png', 'TestImage7.png', 'TestImage9.png']:
         image = cv2.imread(str(IMAGE_DIR / name))
         assert read_revolution_indicator(image) is False, name
+
+
+def read_capture(name):
+    """A frame from the (gitignored) recorded session, or skip."""
+    path = IMAGE_DIR / 'captures' / name
+    if not path.exists():
+        pytest.skip("no recorded captures on this machine")
+    image = cv2.imread(str(path))
+    assert image is not None
+    return image
+
+
+# The hand crop used by the live loop (config.json hand_region): it
+# reaches above the resting fan so that selected cards, which lift
+# upward out of the old 0.75 crop, keep their glyphs in view.
+HAND_CROP_TOP = 0.72
+
+
+@pytest.mark.slow
+def test_greyed_out_cards_are_recognized():
+    """On the player's turn the game dims every card that cannot join
+    a valid play; those cards are still in the hand. This frame holds
+    14 cards, six of them greyed out (a triple of 4s is on the table),
+    with only the fan-edge Wonder and Joker clipped beyond reading."""
+    image = read_capture('20260808_215057_interval.png')
+    height = image.shape[0]
+    cards = read_hand(image[int(height * HAND_CROP_TOP):])
+
+    assert [(c.rank, c.suit) for c in cards] == [
+        (Rank.FIVE, Suit.DIAMONDS),
+        (Rank.FIVE, Suit.HEARTS),
+        (Rank.SIX, Suit.CLUBS),        # greyed out from here...
+        (Rank.SEVEN, Suit.DIAMONDS),
+        (Rank.EIGHT, Suit.HEARTS),
+        (Rank.JACK, Suit.CLUBS),
+        (Rank.QUEEN, Suit.CLUBS),
+        (Rank.KING, Suit.CLUBS),       # ...to here
+        (Rank.ACE, Suit.CLUBS),
+        (Rank.ACE, Suit.HEARTS),
+        (Rank.TWO, Suit.CLUBS),
+        (Rank.TWO, Suit.DIAMONDS),
+    ]
+
+
+@pytest.mark.slow
+def test_lifted_selected_cards_stay_in_the_hand_reading():
+    """Selecting cards lifts them ~55px above the fan; the crop must
+    still contain their glyphs. Here two 2s are lifted: the 2 of
+    diamonds reads fine, while the 2 of clubs' glyph is partially
+    covered by the neighboring lifted card — occlusion recognition
+    cannot beat, so the tracker carries that one via the counter."""
+    image = read_capture('20260808_215508_unknown-digit.png')
+    height = image.shape[0]
+    cards = read_hand(image[int(height * HAND_CROP_TOP):])
+
+    read = [(c.rank, c.suit) for c in cards]
+    assert (Rank.TWO, Suit.DIAMONDS) in read, "lifted card fell out of the crop"
+    for expected in [(Rank.WONDER, None), (Rank.QUEEN, Suit.DIAMONDS),
+                     (Rank.QUEEN, Suit.SPADES)]:
+        assert expected in read
 
 
 @pytest.mark.slow

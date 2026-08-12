@@ -92,6 +92,55 @@ class TestOpponentPlays:
             tracker.update([Card(Rank.NINE, Suit.CLUBS)], HAND)
 
 
+class TestCoveredSuits:
+    """A field card whose suit symbol a neighbor covers is read
+    suitless. It must count toward the trick exactly once, even when
+    the suit pairing wobbles between frames of the static trick."""
+
+    def test_covered_card_counts_in_a_new_trick(self):
+        tracker, state = make_tracker()
+        tracker.update([], HAND)
+        events = tracker.update([Card(Rank.FOUR, Suit.DIAMONDS),
+                                 Card(Rank.FOUR)], HAND)
+        assert len(events) == 1
+        assert len(events[0]['cards']) == 2
+        assert state.unseen[Rank.FOUR] == 2
+
+    def test_static_trick_does_not_recount_the_covered_card(self):
+        tracker, state = make_tracker()
+        tracker.update([], HAND)
+        trick = [Card(Rank.FOUR, Suit.DIAMONDS), Card(Rank.FOUR)]
+        tracker.update(trick, HAND)
+        assert tracker.update(trick, HAND) == []
+        assert state.unseen[Rank.FOUR] == 2
+
+    def test_suit_pairing_wobble_does_not_double_count(self):
+        """The reading pairs the covered card's suit in one frame and
+        loses it again the next — one physical card, one play."""
+        tracker, state = make_tracker()
+        tracker.update([], HAND)
+        tracker.update([Card(Rank.FOUR, Suit.DIAMONDS),
+                        Card(Rank.FOUR)], HAND)
+        assert tracker.update([Card(Rank.FOUR, Suit.DIAMONDS),
+                               Card(Rank.FOUR, Suit.HEARTS)], HAND) == []
+        assert tracker.update([Card(Rank.FOUR, Suit.DIAMONDS),
+                               Card(Rank.FOUR)], HAND) == []
+        assert state.unseen[Rank.FOUR] == 2
+
+    def test_covered_cards_count_again_in_later_tricks(self):
+        """The suitless bucket must hold up to all four copies of a
+        rank over a round, not cap at one like a suited card."""
+        tracker, state = make_tracker()
+        tracker.update([], HAND)
+        tracker.update([Card(Rank.FOUR, Suit.DIAMONDS),
+                        Card(Rank.FOUR)], HAND)
+        tracker.update([Card(Rank.QUEEN, Suit.SPADES)], HAND)
+        events = tracker.update([Card(Rank.FOUR, Suit.CLUBS),
+                                 Card(Rank.FOUR)], HAND)
+        assert len(events[0]['cards']) == 2
+        assert state.unseen[Rank.FOUR] == 0
+
+
 class TestKnownHand:
     """Round-start bar validation gives the tracker the full own hand,
     including clipped cards the reading never shows."""

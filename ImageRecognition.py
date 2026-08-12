@@ -118,6 +118,48 @@ class CardRecognizer:
             result[white_mask == 255] = 255
         return result
 
+    # On the player's turn the game dims every card that cannot join a
+    # valid play to a uniform ~56%: white glyphs land at gray 142 while
+    # staying neutral, and the card's red artwork stays saturated.
+    # Measured on the recorded own-turn frames: greyed glyphs sit at
+    # exactly 142 (thousands of pixels in [140, 149], the neighboring
+    # bands nearly empty), bright glyphs at 255.
+    DIM_GLYPH_BAND = (126, 170)
+    DIM_NEUTRAL_SPREAD = 28
+
+    def apply_dim_mask(self, image):
+        """Isolate the glyphs of greyed-out (invalid-to-play) cards.
+
+        The dim counterpart of apply_white_mask, keeping only the
+        neutral-grey band the dimming maps white glyphs into. Hand
+        reading runs both masks as separate passes: mixing the bands
+        into one mask lets mid-grey card artwork distort the boxes of
+        bright detections. The play field relies on the white mask to
+        drop earlier (dimmed) tricks, so it must never use this one.
+        """
+        lo, hi = self.DIM_GLYPH_BAND
+        result = np.zeros_like(image)
+        if len(image.shape) == 3:
+            channels = image.astype(np.int16)
+            spread = channels.max(axis=2) - channels.min(axis=2)
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            dim = ((spread <= self.DIM_NEUTRAL_SPREAD)
+                   & (gray >= lo) & (gray <= hi))
+            result[dim] = (255, 255, 255)
+        else:
+            dim = (image >= lo) & (image <= hi)
+            result[dim] = 255
+        return result
+
+    def _masked(self, image, apply_mask):
+        """Resolve the apply_mask parameter: True for the white mask,
+        'dim' for the greyed-out-glyph mask, False for the raw image."""
+        if apply_mask == 'dim':
+            return self.apply_dim_mask(image)
+        if apply_mask:
+            return self.apply_white_mask(image)
+        return image
+
     def preprocess_image(self, image, target_size=(64, 64), apply_mask=True):
         """
         Preprocess image for CNN input.
@@ -174,7 +216,8 @@ class CardRecognizer:
         Args:
             image: Input image (BGR or grayscale)
             threshold: Matching threshold (0-1)
-            apply_mask: Whether to apply white mask preprocessing
+            apply_mask: True for the white mask, 'dim' for the
+                greyed-out-glyph mask, False for none
             scales: Iterable of template scales to try. The templates were
                 cropped at inconsistent sizes, so the step must be fine
                 enough that every template hits its true on-screen scale.
@@ -197,8 +240,7 @@ class CardRecognizer:
         if scales is None:
             scales = np.arange(0.4, 1.61, 0.05)
 
-        if apply_mask:
-            image = self.apply_white_mask(image)
+        image = self._masked(image, apply_mask)
 
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -286,10 +328,10 @@ class CardRecognizer:
         ~13px and Spade/Cross (and their mirrored artwork) blur into
         each other. Re-matching all four suit templates inside each
         detection's window at full resolution picks the right one.
-        Mutates and returns the detections.
+        Mutates and returns the detections. Pass the same apply_mask
+        the detections were matched with.
         """
-        if apply_mask:
-            image = self.apply_white_mask(image)
+        image = self._masked(image, apply_mask)
 
         if len(image.shape) == 3:
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -329,6 +371,29 @@ class CardRecognizer:
 
         return detections
 
+    @staticmethod
+    def _boxes_conflict(location_a, location_b, iou_threshold=0.5):
+        """Whether two detection boxes describe the same glyph."""
+        x1, y1, w1, h1 = location_a
+        x2, y2, w2, h2 = location_b
+
+        xi1 = max(x1, x2)
+        yi1 = max(y1, y2)
+        xi2 = min(x1 + w1, x2 + w2)
+        yi2 = min(y1 + h1, y2 + h2)
+
+        if xi2 <= xi1 or yi2 <= yi1:
+            return False
+        intersection = (xi2 - xi1) * (yi2 - yi1)
+        union = w1 * h1 + w2 * h2 - intersection
+        iou = intersection / union
+        # Same glyph matched at two scales gives nested boxes whose
+        # IoU stays low; suppress by smaller-box coverage as well.
+        smaller_area = min(w1 * h1, w2 * h2)
+        coverage = intersection / smaller_area
+
+        return iou > iou_threshold or coverage > 0.7
+
     def _non_max_suppression(self, detections, iou_threshold=0.5):
         """Remove overlapping detections."""
         if not detections:
@@ -338,31 +403,9 @@ class CardRecognizer:
 
         kept = []
         for detection in detections:
-            x1, y1, w1, h1 = detection['location']
-
-            should_keep = True
-            for kept_det in kept:
-                x2, y2, w2, h2 = kept_det['location']
-
-                xi1 = max(x1, x2)
-                yi1 = max(y1, y2)
-                xi2 = min(x1 + w1, x2 + w2)
-                yi2 = min(y1 + h1, y2 + h2)
-
-                if xi2 > xi1 and yi2 > yi1:
-                    intersection = (xi2 - xi1) * (yi2 - yi1)
-                    union = w1 * h1 + w2 * h2 - intersection
-                    iou = intersection / union
-                    # Same glyph matched at two scales gives nested boxes whose
-                    # IoU stays low; suppress by smaller-box coverage as well.
-                    smaller_area = min(w1 * h1, w2 * h2)
-                    coverage = intersection / smaller_area
-
-                    if iou > iou_threshold or coverage > 0.7:
-                        should_keep = False
-                        break
-
-            if should_keep:
+            if not any(self._boxes_conflict(detection['location'],
+                                            kept_det['location'], iou_threshold)
+                       for kept_det in kept):
                 kept.append(detection)
 
         return kept
@@ -515,6 +558,48 @@ FIELD_MATCH_PARAMS = {
 }
 
 
+def read_hand_detections(image):
+    """
+    Raw hand detections: a bright pass plus a greyed-out-cards pass.
+
+    On the player's turn the game dims every card that cannot join a
+    valid play; the white mask erases those glyphs wholesale, so a
+    second pass matches inside the dim band they land in instead. The
+    bright pass runs exactly as always and its detections win every
+    overlap, so hands without greyed-out cards read as before; the dim
+    pass only fills the gaps. Card artwork also has mid-grey pixels,
+    so the dim pass runs on most non-empty crops; its stray artwork
+    matches die in the rank-suit pairing, which keeps the merge safe
+    on bright hands.
+
+    Args:
+        image: BGR image of the player's hand area
+
+    Returns:
+        List of detection dicts, as CardRecognizer.template_match.
+    """
+    recognizer = get_recognizer()
+    detections = recognizer.template_match(image, **HAND_MATCH_PARAMS)
+    recognizer.refine_suit_detections(image, detections)
+
+    dim_mask = recognizer.apply_dim_mask(image)
+    dim_plane = dim_mask[:, :, 0] if dim_mask.ndim == 3 else dim_mask
+    # Skipping truly empty crops (hand played out) is the only safe
+    # shortcut: a single greyed-out card's glyph load is not separable
+    # from ordinary artwork grey by pixel count alone.
+    if cv2.countNonZero(dim_plane) > 500:
+        dim_detections = recognizer.template_match(image, apply_mask='dim',
+                                                   **HAND_MATCH_PARAMS)
+        recognizer.refine_suit_detections(image, dim_detections,
+                                          apply_mask='dim')
+        detections.extend(
+            dim for dim in dim_detections
+            if not any(CardRecognizer._boxes_conflict(dim['location'],
+                                                      bright['location'])
+                       for bright in detections))
+    return detections
+
+
 def read_hand(image):
     """
     Recognize the cards in a hand-region screenshot.
@@ -527,10 +612,7 @@ def read_hand(image):
     """
     from GameLogic.HandReader import detections_to_cards
 
-    recognizer = get_recognizer()
-    detections = recognizer.template_match(image, **HAND_MATCH_PARAMS)
-    recognizer.refine_suit_detections(image, detections)
-    return detections_to_cards(detections)
+    return detections_to_cards(read_hand_detections(image))
 
 
 # The persistent "Revolution - Flip Strength" badge shown above the
@@ -601,14 +683,17 @@ def read_play_field(image):
         image: BGR image of the play-field area
 
     Returns:
-        List of GameLogic Card objects, sorted left to right
+        List of GameLogic Card objects, sorted left to right. A card
+        whose suit symbol is covered by a neighbor still counts (with
+        suit None): dropping it would understate the trick size, and
+        the required play size matters more than the suit.
     """
     from GameLogic.HandReader import detections_to_cards
 
     recognizer = get_recognizer()
     detections = recognizer.template_match(image, **FIELD_MATCH_PARAMS)
     recognizer.refine_suit_detections(image, detections)
-    return detections_to_cards(detections)
+    return detections_to_cards(detections, keep_unpaired_ranks=True)
 
 
 def recognizeWithCNN(image):

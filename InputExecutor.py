@@ -1,12 +1,12 @@
 """The single gate between the bot's brain and the game pad.
 
 Session plans a button sequence for every own turn and hands it here.
-In 'suggest' mode — the default, and the only mode anything currently
-constructs — the plan is just recorded: the dry-run loop over recorded
-captures exercises read -> track -> search -> plan end to end without
-a single button existing. 'act' mode forwards each plan to a backend
-(VirtualGamepad) and must be requested explicitly, together with the
-backend to use; nothing in the codebase does so yet.
+In 'suggest' mode — the default — the plan is just recorded: the
+dry-run loop over recorded captures exercises read -> track -> search
+-> plan end to end without a single button existing. 'act' mode
+forwards each plan to a backend (VirtualGamepad) and must be requested
+explicitly, together with the backend to use; the only place that does
+is VideoStream behind its --act flag.
 """
 
 

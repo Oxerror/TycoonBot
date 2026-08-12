@@ -6,10 +6,17 @@ recognize the hand and current trick, track plays into GameState,
 verify against the status bar, detect whose turn it is and suggest a
 move on ours — including the button presses that would play it, which
 the executor only logs unless it was explicitly built in act mode.
+
+In act mode a turn is pressed at most once: the same turn is usually
+seen on several consecutive frames while the game animates, and
+re-pressing would double-play. The guard lifts once the turn moves on
+(another player's arrow, our own play tracked, or tracking restarts);
+until then held frames just report that the input is already out.
 """
 
 import random
 
+from CardsLeftReader import TURN_BUTTON_BAND
 from GameLogic.Card import Card
 from GameLogic.GameState import DECK_SIZE, GameState, validate_start_hand
 from GameLogic.HandReader import hand_is_ordered
@@ -30,6 +37,26 @@ from ScreenCapture import cropRegion
 TURN_ORDER = ('right', 'middle', 'left')
 
 
+def _mask_turn_buttons(play_field, region):
+    """Black out the Pass/Hint row inside the play-field crop.
+
+    On our turn the game draws the button row across the bottom of the
+    field; its white banners read as an event banner, which would blank
+    the trick and make every suggestion assume we are leading. Masked
+    rows are computed from the same band the turn detector matches.
+    """
+    fy1, fy2 = TURN_BUTTON_BAND[0], TURN_BUTTON_BAND[1]
+    top, bottom = region['top'], region['bottom']
+    height = play_field.shape[0]
+    y1 = int((fy1 - top) / (bottom - top) * height)
+    y2 = int((fy2 - top) / (bottom - top) * height)
+    if y2 <= 0 or y1 >= height:
+        return play_field
+    masked = play_field.copy()
+    masked[max(0, y1):y2, :] = 0
+    return masked
+
+
 class TycoonSession:
     def __init__(self, config, reader=None, executor=None):
         self.config = config
@@ -39,6 +66,7 @@ class TycoonSession:
         self.tracker = None
         self.diverged_frames = 0
         self.previous_bar = None
+        self.acted_this_turn = False
         # Seeded so a Replay of the same session suggests the same moves.
         self.search = SearchPolicy(samples=16, rng=random.Random(0))
 
@@ -82,12 +110,14 @@ class TycoonSession:
         self.tracker = PlayTracker(self.game_state)
         self.tracker.update(trick, cards, player_count)
         self.diverged_frames = 0
+        self.acted_this_turn = False
 
     def _resync(self, bar_counts, trick, cards, player_count):
         """Re-adopt the bar mid-round, keeping hand/revolution knowledge."""
         self.game_state = GameState.from_status_bar(bar_counts)
         self.tracker.resync(self.game_state, trick, cards, player_count)
         self.diverged_frames = 0
+        self.acted_this_turn = False
 
     def _needs_hand_reading(self, counters, active_player, round_start):
         """The hand read costs ~1.5s; opponents play faster than that,
@@ -123,7 +153,11 @@ class TycoonSession:
         if opponent_passes:
             messages.append(f"Passed this trick: {', '.join(opponent_passes)}")
 
-        banner, trick = self.reader.field(play_field)
+        field_view = play_field
+        if active_player == 'player':
+            field_view = _mask_turn_buttons(play_field,
+                                            self.config['play_field'])
+        banner, trick = self.reader.field(field_view)
         if banner:
             # Event banners (All Pass, 8 Stop, Done, ...) cover the
             # field and fool the card templates; skip this reading.
@@ -169,6 +203,9 @@ class TycoonSession:
             try:
                 for event in self.tracker.update(trick, cards, counters['player']):
                     who = 'we' if event['by_player'] else 'opponent'
+                    if event['by_player']:
+                        # Our play registered: the turn we acted on is over.
+                        self.acted_this_turn = False
                     messages.append(f"Play observed ({who}): {event['cards']}")
             except ValueError as error:
                 messages.append(f"ALARM: impossible play observed - {error}")
@@ -232,10 +269,16 @@ class TycoonSession:
                     except ValueError as error:
                         messages.append(f"WARNING: no input plan - {error}")
                     else:
-                        sent = self.executor.execute(plan)
-                        messages.append(('Input sent: ' if sent
-                                         else 'Planned input: ') + ' '.join(plan))
+                        if self.acted_this_turn:
+                            messages.append("Input already sent this turn - "
+                                            "waiting for the game to register it")
+                        else:
+                            sent = self.executor.execute(plan)
+                            self.acted_this_turn = sent
+                            messages.append(('Input sent: ' if sent
+                                             else 'Planned input: ') + ' '.join(plan))
             elif active_player is not None:
+                self.acted_this_turn = False
                 messages.append(f"Waiting: {active_player} opponent is playing")
 
         self.previous_bar = bar_counts

@@ -13,6 +13,14 @@ The bubble also announces whose turn it is: the active player's bubble
 turns bright red while the others stay black. The area around the
 digits is sampled (ignoring the white text) to read that marker.
 
+The red marker is unreliable for the player's own badge when the count
+has two digits (the digits sit on the badge's black wedge, diluting
+the sampled redness below the threshold — measured live 2026-08-12
+with 12 cards: 90 vs the 100 cutoff). The Pass/Hint button row that
+the game draws while waiting for the player's move is therefore the
+primary your-turn signal; the redness still catches the turn's first
+frames, before the row has faded in.
+
 A player who passed keeps their bubble text in yellow until the trick
 ends (seen throughout the recorded sessions, e.g. two opponents yellow
 at once mid-trick), so the same digit segmentation run on a yellow
@@ -26,6 +34,7 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).parent
 DIGIT_TEMPLATE_DIR = PROJECT_ROOT / 'Image' / 'templates' / 'bubble_digits'
+TURN_BUTTON_DIR = PROJECT_ROOT / 'Image' / 'templates' / 'turn_buttons'
 
 # Bubble regions as fractions of the full frame (measured at 1080p).
 PLAYER_REGIONS = {
@@ -52,9 +61,17 @@ MIN_DIGIT_SCORE = 0.6
 # an active bubble measures ~250, an inactive one ~0.
 ACTIVE_BUBBLE_REDNESS = 100
 
+# Band of the frame holding the Pass / timer / Hint / Select row on
+# the player's turn, as (fy1, fy2, fx1, fx2). Measured over the
+# recorded captures: my-turn frames match the banner templates at
+# >= 0.96, every other frame at <= 0.4.
+TURN_BUTTON_BAND = (0.62, 0.76, 0.26, 0.62)
+TURN_BUTTON_SCORE = 0.8
+
 
 class CardsLeftReader:
-    def __init__(self, template_dir=DIGIT_TEMPLATE_DIR):
+    def __init__(self, template_dir=DIGIT_TEMPLATE_DIR,
+                 button_dir=TURN_BUTTON_DIR):
         self.templates = {}
         for template_file in Path(template_dir).glob('*.png'):
             digit = int(template_file.stem)
@@ -64,6 +81,12 @@ class CardsLeftReader:
             self.templates[digit] = cv2.resize(image, DIGIT_SIZE)
         if not self.templates:
             raise FileNotFoundError(f"No digit templates in {template_dir}")
+        self.turn_templates = [
+            image for image in (cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+                                for p in Path(button_dir).glob('*.png'))
+            if image is not None]
+        if not self.turn_templates:
+            raise FileNotFoundError(f"No turn-button templates in {button_dir}")
 
     @staticmethod
     def _white_mask(crop):
@@ -138,6 +161,25 @@ class CardsLeftReader:
                             background[:, 2].mean())
         return red - max(green, blue)
 
+    def _player_turn_buttons(self, frame):
+        """True while the Pass/Hint button row is on screen — the game
+        draws it only when waiting for the player's move."""
+        height, width = frame.shape[:2]
+        fy1, fy2, fx1, fx2 = TURN_BUTTON_BAND
+        band = frame[int(height * fy1):int(height * fy2),
+                     int(width * fx1):int(width * fx2)]
+        band = cv2.cvtColor(band, cv2.COLOR_BGR2GRAY)
+        if height != REFERENCE_FRAME_HEIGHT:
+            scale = REFERENCE_FRAME_HEIGHT / height
+            band = cv2.resize(band, None, fx=scale, fy=scale)
+        if float(band.std()) < 10:
+            # A near-flat band cannot hold the banners, and normalized
+            # matching is numerically unstable on zero-variance input.
+            return False
+        return any(cv2.matchTemplate(band, template,
+                                     cv2.TM_CCOEFF_NORMED).max()
+                   >= TURN_BUTTON_SCORE for template in self.turn_templates)
+
     def read_detailed(self, frame):
         """
         Read every player's card counter from a full game frame.
@@ -148,9 +190,10 @@ class CardsLeftReader:
             that counter is not readable; unknown lists the players
             whose counter showed a digit-sized blob matching no known
             digit template; active names the player whose bubble
-            carries the red your-turn marker, or None when no bubble
-            does; passed lists the players whose bubble text is yellow
-            — the pass marker shown until the trick ends.
+            carries the red your-turn marker ('player' also when the
+            Pass/Hint button row is on screen), or None when neither
+            marker shows; passed lists the players whose bubble text is
+            yellow — the pass marker shown until the trick ends.
         """
         height, width = frame.shape[:2]
         counts = {}
@@ -190,6 +233,9 @@ class CardsLeftReader:
                 unknown.append(player)
             else:
                 counts[player] = int(''.join(str(d) for d in digits))
+
+        if active is None and self._player_turn_buttons(frame):
+            active = 'player'
 
         return counts, unknown, active, passed
 

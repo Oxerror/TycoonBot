@@ -126,18 +126,22 @@ class CachedFrameReader:
                                 else {Rank[r]: n for r, n in bar.items()}))
 
     def counters(self, frame):
-        # `valid` rejects entries from before the pass marker existed;
-        # the counter read is cheap, so those simply re-run.
+        # 'counters_v2': entries recorded before the turn-button
+        # detector under the old key are stale; the counter read is
+        # cheap, so they simply re-run. `valid` likewise rejects
+        # entries from before the pass marker existed.
         return self._get(
-            'counters', lambda: self.inner.counters(frame),
+            'counters_v2', lambda: self.inner.counters(frame),
             encode=lambda value: [value[0], list(value[1]), value[2],
                                   list(value[3])],
             decode=lambda value: (value[0], value[1], value[2], value[3]),
             valid=lambda stored: len(stored) == 4)
 
     def field(self, play_field):
+        # 'field_v2': Session now masks the turn-button rows out of the
+        # crop on own turns, so readings cached before that are stale.
         return self._get(
-            'field', lambda: self.inner.field(play_field),
+            'field_v2', lambda: self.inner.field(play_field),
             encode=lambda value: [value[0], [_encode_card(c) for c in value[1]]],
             decode=lambda value: (value[0], [_decode_card(c) for c in value[1]]))
 

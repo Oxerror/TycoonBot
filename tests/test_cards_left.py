@@ -94,6 +94,35 @@ def test_no_active_player_on_blank_frame():
     assert passed == []
 
 
+class TestPlayerTurnButtons:
+    """The player's own red marker fails on two-digit counts (the
+    digits sit on the badge's black wedge), so the Pass/Hint button
+    row is the primary your-turn signal. Uses recorded captures —
+    skips on a fresh clone."""
+
+    @staticmethod
+    def read_capture(name):
+        path = IMAGE_DIR / 'captures' / name
+        if not path.exists():
+            pytest.skip("no recorded captures on this machine")
+        image = cv2.imread(str(path))
+        assert image is not None
+        return image
+
+    def test_two_digit_own_turn_is_detected(self):
+        image = self.read_capture('20260808_215057_interval.png')
+        counts, _, active, _ = read_cards_left_detailed(image)
+        assert counts['player'] == 14
+        assert active == 'player'
+
+    def test_turn_start_before_the_buttons_fade_in(self):
+        # The button row is not drawn yet on this frame; the red badge
+        # marker (single-digit count) must still catch the turn.
+        image = self.read_capture('20260808_215448_unknown-digit.png')
+        _, _, active, _ = read_cards_left_detailed(image)
+        assert active == 'player'
+
+
 def test_non_game_frame_reads_none():
     frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
     assert read_cards_left(frame) == {

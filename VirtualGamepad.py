@@ -18,11 +18,11 @@ controller -> Properties) or at https://hardwaretester.com/gamepad.
 If a "Controller (XBOX 360 For Windows)" appears there and the button
 lights follow the console output, the input path works end to end.
 
-NOT wired into the live loop: Session's InputExecutor defaults to
-suggest-only, and nothing constructs an act-mode executor. Hooking a
-backend up (and calibrating press timings against the real game) is
-deliberately left for a supervised live session. The timings below are
-uncalibrated placeholders until then.
+Wired into the live loop only on request: `python VideoStream.py
+--act {xbox,ds4}` builds an act-mode executor around one of these
+backends; without the flag the loop stays suggest-only. The timings
+below are placeholders until they are calibrated against the real
+game in a supervised session.
 """
 
 import time

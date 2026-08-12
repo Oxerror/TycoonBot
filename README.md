@@ -33,6 +33,12 @@ python VideoStream.py
 Which monitor and which screen regions are used is set in `config.json`
 (`monitor`: mss index, 1 = primary; regions are fractions of the frame).
 
+By default the loop only *suggests*: it prints the recommended move and
+the button presses that would play it. Add `--act xbox` or `--act ds4`
+(PS Remote Play only accepts PlayStation pads) to actually press them
+on a virtual gamepad — each turn is pressed at most once, and the pad
+requires the ViGEmBus driver (`pip install vgamepad` offers it).
+
 **Collect training data** — run alongside the game to gather real
 frames for tests and templates:
 ```sh

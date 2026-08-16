@@ -178,13 +178,17 @@ play style behind their targets, so the pool keeps both styles.
 
 Step 4 (playing alone) has its offline half: `InputPlanner.py`
 translates a suggested move into the button presses that would play it
-— D-pad steps across the recognized fan (bar-recovered edge cards get
-slotted in by the game's display sort), select each card, confirm, or
-hit pass — with every unverified UI belief (cursor start/wrap, button
-roles, confirm flow) isolated in its `UI_ASSUMPTIONS` block for the
-first live session to correct in one place. `Session` runs the planner
-on every own turn and hands the sequence to an `InputExecutor`, which
-in its default suggest-only mode just logs it; Replay therefore
+— a reveal press to unhide the cursor, D-pad steps across the playable
+cards of the recognized fan (the game greys out cards in no legal move
+and the cursor skips them; bar-recovered edge cards get slotted in by
+the game's display sort), CROSS on each card, OPTIONS to submit, or
+TRIANGLE to pass. Every UI fact lives in its `UI_ASSUMPTIONS` block,
+verified against the real game in the supervised session of 2026-08-16
+(the original guesses had the pass/confirm buttons wrong and missed
+both the hidden-cursor reveal and the greyed-card skipping). `Session`
+runs the planner on every own turn — deriving the cursor stops from
+`Rules.legal_moves` — and hands the sequence to an `InputExecutor`,
+which in its default suggest-only mode just logs it; Replay therefore
 exercises the whole loop — read → track → search → plan inputs — on
 the recorded captures, and the planned sequences are fixtured beside
 them like the recognition readings
@@ -192,8 +196,11 @@ them like the recognition readings
 `VirtualGamepad.py` (Xbox 360 via vgamepad/ViGEm, DualShock 4 for PS
 Remote Play), smoke-testable without the game and reachable only via
 `VideoStream.py --act`, which presses each turn's plan at most once;
-verifying the UI assumptions and calibrating press timings against the
-real game remains a supervised live-session task.
+press/gap timings are calibrated live values (the first placeholders
+dropped presses over Remote Play). Remaining live caveats: the game
+eats one pad press to switch control modes after any human
+mouse/keyboard input, and the ~90s turn timer auto-plays a minimal
+legal move on expiry, so a stalled bot never blocks the match.
 
 Known gaps: in dense fans the outermost cards are clipped beyond their
 emblems and are not read (recovered at round start via the bar),

@@ -21,17 +21,18 @@ lights follow the console output, the input path works end to end.
 Wired into the live loop only on request: `python VideoStream.py
 --act {xbox,ds4}` builds an act-mode executor around one of these
 backends; without the flag the loop stays suggest-only. The timings
-below are placeholders until they are calibrated against the real
-game in a supervised session.
+below were calibrated in the supervised session of 2026-08-16: at the
+old 0.05/0.08 placeholders PS Remote Play dropped face-button presses
+outright, at 0.12/0.35 every press landed.
 """
 
 import time
 
-from InputPlanner import (CIRCLE, CROSS, DPAD_LEFT, DPAD_RIGHT, SQUARE,
-                          TRIANGLE)
+from InputPlanner import (CIRCLE, CROSS, DPAD_LEFT, DPAD_RIGHT, OPTIONS,
+                          SQUARE, TRIANGLE)
 
-PRESS_SECONDS = 0.05
-GAP_SECONDS = 0.08
+PRESS_SECONDS = 0.12
+GAP_SECONDS = 0.35
 
 
 class GamepadBackend:
@@ -73,7 +74,7 @@ class GamepadBackend:
 
 class XboxBackend(GamepadBackend):
     """Xbox 360 pad; PlayStation face buttons land on their XInput
-    positions (CROSS=A, CIRCLE=B, SQUARE=X, TRIANGLE=Y)."""
+    positions (CROSS=A, CIRCLE=B, SQUARE=X, TRIANGLE=Y, OPTIONS=START)."""
 
     def __init__(self, vg=None, **timings):
         super().__init__(vg, **timings)
@@ -83,6 +84,7 @@ class XboxBackend(GamepadBackend):
             CIRCLE: buttons.XUSB_GAMEPAD_B,
             SQUARE: buttons.XUSB_GAMEPAD_X,
             TRIANGLE: buttons.XUSB_GAMEPAD_Y,
+            OPTIONS: buttons.XUSB_GAMEPAD_START,
             DPAD_LEFT: buttons.XUSB_GAMEPAD_DPAD_LEFT,
             DPAD_RIGHT: buttons.XUSB_GAMEPAD_DPAD_RIGHT,
         }
@@ -109,6 +111,7 @@ class DS4Backend(GamepadBackend):
             CIRCLE: buttons.DS4_BUTTON_CIRCLE,
             SQUARE: buttons.DS4_BUTTON_SQUARE,
             TRIANGLE: buttons.DS4_BUTTON_TRIANGLE,
+            OPTIONS: buttons.DS4_BUTTON_OPTIONS,
         }
         directions = self.vg.DS4_DPAD_DIRECTIONS
         self._dpad = {
@@ -141,7 +144,8 @@ if __name__ == '__main__':
     print(f"{kind} pad created - watch it in joy.cpl (Properties) or "
           "https://hardwaretester.com/gamepad")
     time.sleep(2)  # give the tester a moment to enumerate the new pad
-    for name in (DPAD_LEFT, DPAD_RIGHT, CROSS, CIRCLE, SQUARE, TRIANGLE):
+    for name in (DPAD_LEFT, DPAD_RIGHT, CROSS, CIRCLE, SQUARE, TRIANGLE,
+                 OPTIONS):
         print(f"  pressing {name}")
         backend.press(name)
         time.sleep(1)

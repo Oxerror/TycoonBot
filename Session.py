@@ -25,8 +25,9 @@ from GameLogic.Recommender import recommend
 from GameLogic.SearchRecommender import SearchPolicy
 from GameLogic.Simulator import Observation
 from FrameReader import FrameReader
+from GameLogic.Rules import legal_moves
 from InputExecutor import InputExecutor
-from InputPlanner import merge_into_fan, plan_move
+from InputPlanner import cursor_stops, merge_into_fan, plan_move
 from ScreenCapture import cropRegion
 
 
@@ -263,9 +264,13 @@ class TycoonSession:
                                     f"{list(move) if move else 'PASS'}")
                     # cards was read this frame (own turns always are);
                     # the tracked hand fills in the clipped fan edges.
+                    # The cursor only stops on cards the game leaves
+                    # bright: those participating in some legal move.
                     try:
                         fan = merge_into_fan(cards or [], own_hand)
-                        plan = plan_move(fan, move)
+                        stops = cursor_stops(fan, legal_moves(
+                            own_hand, trick, self.tracker.revolution))
+                        plan = plan_move(fan, move, stops=stops)
                     except ValueError as error:
                         messages.append(f"WARNING: no input plan - {error}")
                     else:

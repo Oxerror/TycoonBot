@@ -1,11 +1,12 @@
 """Translate a recommended move into gamepad button presses.
 
 The Tycoon selection UI is cursor-driven: the hand fans out at the
-bottom of the screen, the D-pad moves a cursor across the cards, one
-button lifts the card under the cursor into the staged play, another
-submits the staged cards (passing has its own button). The planner
-turns "play these cards" into that button sequence, locating each card
-by its position in the recognized fan.
+bottom of the screen, the D-pad moves a cursor across the playable
+cards (greyed-out ones are skipped), CROSS lifts the card under the
+cursor into the staged play, OPTIONS submits the staged cards and
+TRIANGLE passes. The planner turns "play these cards" into that button
+sequence, locating each card by its position in the recognized fan and
+counting steps across the playable slots only.
 
 The buttons use PlayStation names (the game is a PlayStation title);
 VirtualGamepad translates them to whatever pad it emulates.
@@ -25,21 +26,37 @@ CROSS = 'CROSS'
 CIRCLE = 'CIRCLE'
 SQUARE = 'SQUARE'
 TRIANGLE = 'TRIANGLE'
+OPTIONS = 'OPTIONS'
 
-# Every unverified belief about the selection UI lives in this one
-# block, so the first supervised live session can correct the lot in
-# one place. Beyond these entries the planner assumes: the fan shows
-# the cards exactly in recognized left-to-right order (merge_into_fan
-# slots unread cards in by the game's display sort), and selecting a
-# card lifts it in place, so cursor indices stay valid while a
-# multi-card set is gathered.
+# Verified against the real game in the supervised session of
+# 2026-08-16. The selection UI works like this:
+# - The cursor is hidden when a turn starts; the first d-pad press is
+#   consumed revealing it on the leftmost PLAYABLE card, without
+#   stepping ('reveal_press', prepended to every selection plan).
+# - The cursor only stops on playable cards: the game greys out every
+#   card that participates in no legal move, the cursor skips them,
+#   and wrap-around wraps within the playable subset. Brightness is
+#   fixed for the whole turn - lifting cards never re-greys the rest -
+#   so plan_move steps across `stops` (see cursor_stops), not raw fan
+#   slots.
+# - Selecting lifts a card in place (fan order and neighbours are
+#   untouched), so stop indices stay valid while a multi-card set is
+#   gathered.
+# - The fan shows the cards exactly in recognized left-to-right order
+#   (merge_into_fan slots unread cards in by the game's display sort).
+# Caveat: the game consumes one pad press to switch control modes
+# after any human mouse/keyboard input. Autonomous play never
+# triggers it, but a supervisor touching the mouse mid-session costs
+# the next plan its reveal press.
 UI_ASSUMPTIONS = {
-    'cursor_start': 0,           # the cursor rests on the leftmost card at turn start
-    'cursor_wraps': True,        # stepping past either end wraps to the other
+    'reveal_press': DPAD_RIGHT,  # consumed unhiding the cursor, no step
+    'cursor_start': 0,           # the cursor reveals on the leftmost stop
+    'cursor_wraps': True,        # stepping past either end wraps (within the stops)
     'select_button': CROSS,      # lifts/toggles the card under the cursor
-    'confirm_button': TRIANGLE,  # submits the lifted cards as the play
-    'pass_button': SQUARE,       # passes the turn
-    'pass_needs_confirm': False, # whether a confirm press must follow the pass button
+    'confirm_button': OPTIONS,   # submits the lifted cards as the play
+    'pass_button': TRIANGLE,     # passes the turn instantly
+    'pass_needs_confirm': False, # no confirm press follows the pass button
+    'deselect_button': CIRCLE,   # lowers every lifted card (abort helper, never planned)
 }
 
 
@@ -108,23 +125,50 @@ def _cursor_steps(position, target, size, wraps):
     return [DPAD_LEFT] * -delta
 
 
-def plan_move(fan, move, ui=None):
+def _participates(card, move_card):
+    """Whether a fan card can be the move card on screen: same rank,
+    and same suit when both suits are known (either side may be a
+    suitless bar-recovered placeholder)."""
+    if card.rank != move_card.rank:
+        return False
+    return (card.suit is None or move_card.suit is None
+            or card.suit == move_card.suit)
+
+
+def cursor_stops(fan, moves):
+    """Fan indices the cursor can stop on, given the legal moves.
+
+    The game greys out every card that participates in no legal move
+    and the cursor skips them, so only the participating slots are
+    cursor stops. Brightness is fixed for the whole turn; one call per
+    turn is enough.
+    """
+    return [index for index, card in enumerate(fan)
+            if any(_participates(card, move_card)
+                   for move in moves for move_card in move)]
+
+
+def plan_move(fan, move, ui=None, stops=None):
     """The button sequence that plays `move` on the displayed `fan`.
 
     Args:
         fan: Cards as displayed left to right (merge_into_fan output).
         move: tuple of Cards to play, or Rules.PASS (empty) to pass.
         ui: dict overriding individual UI_ASSUMPTIONS entries.
+        stops: fan indices the cursor stops on (cursor_stops output).
+            None means every slot - only true when leading, where
+            every card is playable.
 
     Returns:
-        List of button names; a backend presses them one by one. The
-        cards are selected in fan order, each leg taking the shorter
-        cursor direction.
+        List of button names; a backend presses them one by one. A
+        reveal press unhides the cursor first, then the cards are
+        selected in fan order, each leg taking the shorter cursor
+        direction across the stops.
 
     Raises:
-        ValueError: a move card has no fan slot — recognition and
-            recommendation disagree, and pressing anything would be a
-            guess.
+        ValueError: a move card has no playable fan slot — recognition
+            and recommendation disagree, and pressing anything would
+            be a guess.
     """
     ui = {**UI_ASSUMPTIONS, **(ui or {})}
     if not move:
@@ -136,21 +180,27 @@ def plan_move(fan, move, ui=None):
     if not fan:
         raise ValueError("cannot plan a play on an empty fan")
 
-    available = list(range(len(fan)))
+    stops = list(range(len(fan))) if stops is None else sorted(stops)
+    if not stops:
+        raise ValueError("a move is wanted but no fan slot is playable")
+
+    available = list(stops)
     targets = []
     for card in move:
         slot = _matching_slot(fan, available, card)
         if slot is None:
-            raise ValueError(f"{card} has no slot in the recognized fan {fan}")
+            raise ValueError(f"{card} has no playable slot in the "
+                             f"recognized fan {fan}")
         available.remove(slot)
         targets.append(slot)
 
-    plan = []
-    position = min(ui['cursor_start'], len(fan) - 1)
+    plan = [ui['reveal_press']] if ui['reveal_press'] else []
+    position = min(ui['cursor_start'], len(stops) - 1)
     for target in sorted(targets):
-        plan.extend(_cursor_steps(position, target, len(fan),
+        stop = stops.index(target)
+        plan.extend(_cursor_steps(position, stop, len(stops),
                                   ui['cursor_wraps']))
         plan.append(ui['select_button'])
-        position = target
+        position = stop
     plan.append(ui['confirm_button'])
     return plan

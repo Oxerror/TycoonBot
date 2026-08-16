@@ -12,8 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from InputPlanner import (CIRCLE, CROSS, DPAD_LEFT, DPAD_RIGHT, SQUARE,
-                          TRIANGLE)
+from InputPlanner import (CIRCLE, CROSS, DPAD_LEFT, DPAD_RIGHT, OPTIONS,
+                          SQUARE, TRIANGLE)
 from VirtualGamepad import DS4Backend, XboxBackend
 
 
@@ -41,11 +41,13 @@ def fake_vg():
         VDS4Gamepad=FakePad,
         XUSB_BUTTON=SimpleNamespace(
             XUSB_GAMEPAD_A='A', XUSB_GAMEPAD_B='B', XUSB_GAMEPAD_X='X',
-            XUSB_GAMEPAD_Y='Y', XUSB_GAMEPAD_DPAD_LEFT='LEFT',
+            XUSB_GAMEPAD_Y='Y', XUSB_GAMEPAD_START='START',
+            XUSB_GAMEPAD_DPAD_LEFT='LEFT',
             XUSB_GAMEPAD_DPAD_RIGHT='RIGHT'),
         DS4_BUTTONS=SimpleNamespace(
             DS4_BUTTON_CROSS='CROSS', DS4_BUTTON_CIRCLE='CIRCLE',
-            DS4_BUTTON_SQUARE='SQUARE', DS4_BUTTON_TRIANGLE='TRIANGLE'),
+            DS4_BUTTON_SQUARE='SQUARE', DS4_BUTTON_TRIANGLE='TRIANGLE',
+            DS4_BUTTON_OPTIONS='OPTIONS'),
         DS4_DPAD_DIRECTIONS=SimpleNamespace(
             DS4_BUTTON_DPAD_WEST='WEST', DS4_BUTTON_DPAD_EAST='EAST',
             DS4_BUTTON_DPAD_NONE='NONE'),
@@ -63,8 +65,8 @@ def ds4():
 class TestXbox:
     def test_face_buttons_land_on_xinput_positions(self):
         backend = xbox()
-        for name, expected in ((CROSS, 'A'), (CIRCLE, 'B'),
-                               (SQUARE, 'X'), (TRIANGLE, 'Y')):
+        for name, expected in ((CROSS, 'A'), (CIRCLE, 'B'), (SQUARE, 'X'),
+                               (TRIANGLE, 'Y'), (OPTIONS, 'START')):
             backend.pad.calls.clear()
             backend.press(name)
             assert backend.pad.calls == [('press', expected), ('update',),
@@ -103,8 +105,8 @@ class TestDS4:
     def test_planner_vocabulary_is_fully_mapped(self):
         backend = ds4()
         backend.press_sequence([DPAD_LEFT, DPAD_RIGHT, CROSS, CIRCLE,
-                                SQUARE, TRIANGLE])
-        assert len([c for c in backend.pad.calls if c == ('update',)]) == 12
+                                SQUARE, TRIANGLE, OPTIONS])
+        assert len([c for c in backend.pad.calls if c == ('update',)]) == 14
 
 
 def test_missing_vgamepad_explains_itself():

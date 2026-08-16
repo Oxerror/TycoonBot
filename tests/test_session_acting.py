@@ -95,3 +95,19 @@ def test_suggest_mode_still_plans_every_frame():
     session.process_frame(FRAME)
 
     assert len(executor.history) == 2
+
+
+class TestPolicyChoice:
+    def test_default_is_the_search(self):
+        session = TycoonSession(CONFIG, reader=SceneReader())
+        assert session.net_policy is None
+
+    def test_net_policy_loads_the_trained_evaluator(self):
+        from GameLogic.PolicyNet import LearnedPolicy
+        session = TycoonSession(CONFIG, reader=SceneReader(), policy='net')
+        assert isinstance(session.net_policy, LearnedPolicy)
+
+    def test_unknown_policy_refuses(self):
+        import pytest
+        with pytest.raises(ValueError):
+            TycoonSession(CONFIG, reader=SceneReader(), policy='mcts')

@@ -39,7 +39,13 @@ Observation = namedtuple('Observation', [
     'counts',       # cards left per player, by seat
     'passed',       # seats locked out of the current trick
     'last_player',  # who laid down the current set, None when leading
-])
+    # Match context (defaults: a bare first round). `roles` is the
+    # previous round's finish place per seat (0 Tycoon .. 3 Beggar),
+    # None when there is no previous round — the exchange shapes the
+    # hands by role, so policies deserve to know who is stacked.
+    'roles',
+    'round_index',  # 0-based round number within the match
+], defaults=(None, 0))
 
 
 def build_deck():
@@ -85,7 +91,8 @@ def random_policy(rng):
     return policy
 
 
-def play_round(hands, leader, policies, on_event=None):
+def play_round(hands, leader, policies, on_event=None, roles=None,
+               round_index=0):
     """
     Run one round to completion.
 
@@ -94,6 +101,9 @@ def play_round(hands, leader, policies, on_event=None):
         leader: index of the player leading the first trick
         policies: one policy per player
         on_event: optional callable receiving every engine event
+        roles: previous round's finish place per seat, None in a
+            bare first round (carried into every Observation)
+        round_index: 0-based round number within the match
 
     Returns:
         The finish order: Tycoon first, Beggar last.
@@ -114,7 +124,9 @@ def play_round(hands, leader, policies, on_event=None):
                           unseen=unseen,
                           counts=tuple(len(h) for h in engine.hands),
                           passed=frozenset(engine.passed),
-                          last_player=engine.last_player)
+                          last_player=engine.last_player,
+                          roles=roles,
+                          round_index=round_index)
 
         move = policies[player](obs)
         for event in engine.step(move if move else PASS):
@@ -222,7 +234,13 @@ def play_game(policies, rounds, rng, on_event=None):
                   else rankings[-1][-1])
         if on_event is not None:
             on_event(('round_start', index, leader))
+        roles = None
         if rankings:
             exchange_cards(hands, rankings[-1], policies, on_event)
-        rankings.append(play_round(hands, leader, policies, on_event))
+            roles = [0] * PLAYER_COUNT
+            for place, seat in enumerate(rankings[-1]):
+                roles[seat] = place
+            roles = tuple(roles)
+        rankings.append(play_round(hands, leader, policies, on_event,
+                                   roles=roles, round_index=index))
     return rankings

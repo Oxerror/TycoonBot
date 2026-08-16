@@ -101,9 +101,9 @@ def renderMessages(messages, suggestion):
     return canvas
 
 
-def videoCapturing(executor=None):
+def videoCapturing(executor=None, policy='search'):
     config = loadConfig()
-    session = TycoonSession(config, executor=executor)
+    session = TycoonSession(config, executor=executor, policy=policy)
     sct = mss.mss()
     parkDebugWindows(sct, config['monitor'])
 
@@ -147,4 +147,9 @@ if __name__ == "__main__":
         '--act', choices=('xbox', 'ds4'),
         help="press the planned buttons on a virtual pad (ds4 for PS "
              "Remote Play) instead of only logging them")
-    videoCapturing(buildExecutor(parser.parse_args().act))
+    parser.add_argument(
+        '--policy', choices=('search', 'net'), default='search',
+        help="who decides on trusted turns: the rollout search "
+             "(default) or the trained net in one forward pass")
+    args = parser.parse_args()
+    videoCapturing(buildExecutor(args.act), policy=args.policy)

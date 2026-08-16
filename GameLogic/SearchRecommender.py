@@ -29,14 +29,16 @@ from GameLogic.TrickEngine import TrickEngine
 SUITS = tuple(Suit)
 
 
-def rollout_observation(engine, seat):
+def rollout_observation(engine, seat, roles=None, round_index=0):
     """The acting seat's full view of a determinized rollout world.
 
     Inside a rollout every hidden card sits in some engine hand, so
     the seat's unseen counts are simply the other hands pooled — an
     Observation exactly like the live one, letting observation
     policies (the learned net, the recommender) steer rollouts with
-    the same in-distribution inputs they were built for.
+    the same in-distribution inputs they were built for. The match
+    context (roles, round) is the root decision's — a rollout finishes
+    the same round.
     """
     unseen = {rank: 0 for rank in Rank}
     for other, hand in enumerate(engine.hands):
@@ -50,7 +52,9 @@ def rollout_observation(engine, seat):
                        unseen=unseen,
                        counts=tuple(len(hand) for hand in engine.hands),
                        passed=frozenset(engine.passed),
-                       last_player=engine.last_player)
+                       last_player=engine.last_player,
+                       roles=roles,
+                       round_index=round_index)
 
 
 class SearchPolicy:
@@ -157,7 +161,8 @@ class SearchPolicy:
             player = engine.current
             if self._rollout_wants_obs:
                 engine.step(self.rollout_policy(
-                    rollout_observation(engine, player)))
+                    rollout_observation(engine, player, roles=obs.roles,
+                                        round_index=obs.round_index)))
             else:
                 engine.step(self.rollout_policy(engine.hands[player],
                                                 engine.trick,

@@ -20,10 +20,16 @@ from GameLogic.Rules import PASS, legal_moves
 
 
 class PlaceNet(nn.Module):
-    def __init__(self, hidden=64):
+    """Sized for the match-context feature set: three 256-wide hidden
+    layers (the 64-wide two-layer original underfit once the data grew
+    past the first ladder rung). Constructor defaults are the loading
+    contract — load() rebuilds this exact architecture."""
+
+    def __init__(self, hidden=256):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(FEATURE_COUNT, hidden), nn.ReLU(),
+            nn.Linear(hidden, hidden), nn.ReLU(),
             nn.Linear(hidden, hidden), nn.ReLU(),
             nn.Linear(hidden, 1),
         )

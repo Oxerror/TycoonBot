@@ -16,7 +16,9 @@ from GameLogic.Rules import (causes_revolution, contains_wonder,
                              wins_trick_immediately)
 
 RANKS = list(Rank)
-FEATURE_COUNT = 4 * len(RANKS) + 17
+# 4 rank histograms + 17 scalars + match context: a no-roles flag,
+# a role one-hot for the own seat and each opponent, the round index.
+FEATURE_COUNT = 4 * len(RANKS) + 17 + 1 + 4 * 4 + 1
 
 
 def _rank_counts(cards):
@@ -48,6 +50,17 @@ def encode(obs, move):
     features.append(len(hand) / 14)
     features += [obs.counts[seat] / 14 for seat in others]
     features += [1.0 if seat in obs.passed else 0.0 for seat in others]
+
+    # Match context: the exchange stacks the Tycoon's hand and strips
+    # the Beggar's, so who holds which role — and whether roles exist
+    # at all yet — changes what the same cards are worth.
+    features.append(1.0 if obs.roles is None else 0.0)
+    for seat in [obs.seat] + others:
+        one_hot = [0.0] * 4
+        if obs.roles is not None:
+            one_hot[obs.roles[seat]] = 1.0
+        features += one_hot
+    features.append(obs.round_index / 3)
 
     features.append(1.0 if obs.trick else 0.0)
     features.append(len(obs.trick) / 4)

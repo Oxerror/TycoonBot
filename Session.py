@@ -59,7 +59,7 @@ def _mask_turn_buttons(play_field, region):
 
 
 class TycoonSession:
-    def __init__(self, config, reader=None, executor=None):
+    def __init__(self, config, reader=None, executor=None, policy='search'):
         self.config = config
         self.reader = reader if reader is not None else FrameReader()
         self.executor = executor if executor is not None else InputExecutor()
@@ -70,6 +70,16 @@ class TycoonSession:
         self.acted_this_turn = False
         # Seeded so a Replay of the same session suggests the same moves.
         self.search = SearchPolicy(samples=16, rng=random.Random(0))
+        # 'net' answers each trusted turn with the trained evaluator in
+        # one forward pass instead of the multi-second rollout search
+        # (it beat search16 head-to-head in the arena); the untrusted-
+        # state fallback below stays the heuristic either way.
+        self.net_policy = None
+        if policy == 'net':
+            from GameLogic.SelfPlay import learned_rollout
+            self.net_policy = learned_rollout()
+        elif policy != 'search':
+            raise ValueError(f"unknown policy {policy!r}")
 
     def _suggest(self, own_hand, trick, counters, passed_players):
         """Pick a move with the rollout search when the table state is
@@ -101,7 +111,7 @@ class TycoonSession:
                               counts=(len(own_hand), *opponent_counts),
                               passed=passed_seats,
                               last_player=last_player)
-            return self.search(obs)
+            return (self.net_policy or self.search)(obs)
         return recommend(own_hand, trick, self.tracker.revolution,
                          unseen=unseen)
 
